@@ -1,4 +1,4 @@
-/** 发布前总检：语法、结构、凭据、子路径、数据完整性一次跑完。 */
+﻿/** 发布前总检：语法、结构、凭据、子路径、数据完整性一次跑完。 */
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
@@ -122,5 +122,12 @@ say(big.length === 0, '无超过 GitHub 100MB 单文件限制的文件');
 say(fs.existsSync('.nojekyll'), '.nojekyll 已就位（Pages 跳过 Jekyll）');
 say(fs.existsSync('push.ps1'), 'push.ps1 已就位');
 
+
+// ---------- 8. 版本号一致性 ----------
+section('版本号');
+const htmlV = [...html.matchAll(/\?v=(\d+)/g)].map((m) => m[1]);
+const appV = (app.match(/const VERSION = 'v(\d+)'/) || [])[1];
+say(htmlV.length > 0 && new Set(htmlV).size === 1, `index.html 引用版本统一（${[...new Set(htmlV)].join(',')}）`);
+say(appV && htmlV.every((v) => v === appV), `app.js VERSION=v${appV} 与引用一致`);
 console.log(`\n${fail === 0 ? '═══ 发布前总检全部通过 ═══' : `═══ 有 ${fail} 项失败 ═══`}`);
 process.exitCode = fail ? 1 : 0;
