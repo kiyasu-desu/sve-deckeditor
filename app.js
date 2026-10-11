@@ -175,6 +175,13 @@
   // 基础卡组 40~50 张；进化卡组 0~10 张；同名卡（两个分区合计）最多 3 张
   const LIMIT = { basicMin: 40, basicMax: 50, evoMin: 0, evoMax: 10, per: 3 };
 
+  // ------------------------------------------------------------ 设备判定
+  // 触摸设备没有右键，卡片点击改为弹出「数量选择层」；
+  // 窄屏（手机/平板竖屏）把左右两栏改成覆盖式抽屉。
+  const IS_TOUCH = (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches)
+    || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+  const NARROW = () => (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 860px)').matches);
+
   // 费用档位（筛选与费用曲线共用）：1- 表示 1 费及以下，8+ 表示 8 费及以上
   const COST_LABELS = ['1-', '2', '3', '4', '5', '6', '7', '8+'];
   function costBucket(raw) {
@@ -575,9 +582,108 @@
 
     el.addEventListener('click', (e) => {
       if (longPressed) { longPressed = false; return; }
+      // 触摸设备没有右键，改为在卡片上浮出增减控件
+      if (IS_TOUCH) { openQtyCard(el, c); return; }
       addCard(c, e.shiftKey ? -1 : 1);
     });
-    el.addEventListener('contextmenu', (e) => { e.preventDefault(); addCard(c, -1); });
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (IS_TOUCH) return;            // 移动端长按是放大卡图，不触发移除
+      addCard(c, -1);
+    });
+  }
+
+  // ============================================================ 数量浮层（移动端）
+  // 触摸设备没有右键，点卡片时在**图片中间浮出增减控件**，
+  // 点其他地方收起、恢复纯粹卡图显示。
+  let openCardEl = null;      // 当前展开的卡片元素
+  let openCardData = null;
+
+  function qtyCount(c) {
+    if (!c || !c.sid) return 0;
+    return (state.deck.basic[c.sid] || 0) + (state.deck.evo[c.sid] || 0);
+  }
+
+  function closeQtyCard() {
+    if (openCardEl) {
+      openCardEl.classList.remove('qty-open');
+      const ov = openCardEl.querySelector('.qty-overlay');
+      if (ov) ov.remove();
+    }
+    openCardEl = null;
+    openCardData = null;
+  }
+
+  // renderGrid 会整体重建网格，重建后把浮层挂回同一张卡上
+  function restoreQtyCard() {
+    if (!openCardData) return;
+    const sid = openCardData.sid;
+    const el = $('grid').querySelector(`.card[data-sid="${sid}"]`);
+    if (!el) { closeQtyCard(); return; }
+    openCardEl = null;                     // 旧元素已失效
+    attachQtyOverlay(el, openCardData);
+  }
+
+  function refreshQtyCard() {
+    if (!openCardEl || !openCardData) return;
+    const n = qtyCount(openCardData);
+    const num = openCardEl.querySelector('.qty-overlay .qty-n');
+    if (num) num.textContent = n;
+  }
+
+  function openQtyCard(el, c) {
+    if (openCardEl === el) { closeQtyCard(); return; }   // 再点一次收起
+    closeQtyCard();
+    if (!c.sid || sideOf(c) === null) return;            // 不可组卡的不展开
+    openCardData = c;
+    attachQtyOverlay(el, c);
+  }
+
+  // 把增减浮层挂到卡片上（独立出来，便于重绘后复用）
+  function attachQtyOverlay(el, c) {
+    const side = sideOf(c);
+    const n = qtyCount(c);
+    const old = el.querySelector('.qty-overlay');
+    if (old) old.remove();
+
+    const ov = document.createElement('div');
+    ov.className = 'qty-overlay';
+    ov.innerHTML = '<button class="qty-b" data-q="-1" aria-label="减一">−</button>'
+      + `<span class="qty-n">${n}</span>`
+      + '<button class="qty-b" data-q="1" aria-label="加一">＋</button>';
+
+    ov.addEventListener('click', (e) => {
+      const b = e.target.closest('.qty-b');
+      if (!b) return;
+      e.stopPropagation();
+      const cur = qtyCount(c);
+      const d = Number(b.dataset.q);
+      if (d > 0 && cur >= LIMIT.per) { toast(`每张卡最多 ${LIMIT.per} 张`); return; }
+      if (d < 0 && cur <= 0) return;
+      state.side = side;                 // 始终加到该卡所属的分区
+      addCard(c, d);                     // 内部会重绘网格
+      restoreQtyCard();                  // 重绘后把浮层挂回去
+    });
+    // 浮层自身吞掉点击，避免冒泡到「点别处关闭」
+    ov.addEventListener('pointerdown', (e) => e.stopPropagation());
+
+    el.appendChild(ov);
+    el.classList.add('qty-open');
+    openCardEl = el;
+    openCardData = c;
+  }
+
+  // 点空白处 / 滚动时收起
+  function bindQtyDismiss() {
+    document.addEventListener('pointerdown', (e) => {
+      if (!openCardEl) return;
+      if (e.target.closest('.qty-overlay')) return;
+      if (e.target.closest('.card') === openCardEl) return;
+      closeQtyCard();
+    }, true);
+    const grid = $('grid');
+    if (grid) grid.addEventListener('scroll', closeQtyCard, { passive: true });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQtyCard(); });
   }
 
   function renderGrid() {
@@ -589,6 +695,7 @@
       const el = document.createElement('div');
       el.className = 'card' + (c.sid ? '' : ' nosid');
       el.draggable = false;
+      if (c.sid) el.dataset.sid = c.sid;      // 供重绘后恢复数量浮层定位
 
       if (c.md5) {
         const img = document.createElement('img');
@@ -633,6 +740,7 @@
       frag.appendChild(el);
     }
     grid.replaceChildren(frag);
+    restoreQtyCard();       // 重绘后把数量浮层挂回同一张卡
     updateDiag();
   }
 
@@ -1292,6 +1400,13 @@
   }
 
   function bindEvents() {
+    // 设备类名：驱动移动端样式与交互
+    document.body.classList.toggle('is-touch', IS_TOUCH);
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)) {
+      document.body.classList.add('is-mobile');
+    }
+    bindQtyDismiss();
+
     $('fText').oninput = (e) => { state.filter.text = e.target.value; renderGrid(); };
 
     // 兵种关键词搜索
@@ -1373,9 +1488,19 @@
 
     $('deckName').onchange = (e) => { state.deck.name = e.target.value || '未命名'; saveStore(); };
 
-    // 左右两栏折叠（非全屏时给卡池腾地方）
+    // 左右两栏折叠（桌面：压成窄条；窄屏：改为覆盖式抽屉）
     const togglePane = (which) => {
       const isFilters = which === 'filters';
+      if (NARROW()) {
+        // 窄屏下按钮变成抽屉开关，一次只开一个
+        const body = document.body;
+        const want = isFilters ? 'drawer-filters' : 'drawer-deck';
+        const other = isFilters ? 'drawer-deck' : 'drawer-filters';
+        const on = body.classList.contains(want);
+        body.classList.remove(other);
+        body.classList.toggle(want, !on);
+        return;
+      }
       const cls = isFilters ? 'hide-filters' : 'hide-deck';
       const main = $('main');
       main.classList.toggle(cls);
@@ -1385,6 +1510,15 @@
     };
     $('btnFiltersToggle').onclick = () => togglePane('filters');
     $('btnDeckToggle').onclick = () => togglePane('deck');
+    // 点抽屉外的遮罩关闭
+    document.addEventListener('click', (e) => {
+      if (!NARROW()) return;
+      const b = document.body;
+      if (!b.classList.contains('drawer-filters') && !b.classList.contains('drawer-deck')) return;
+      if (e.target.closest('.filters') || e.target.closest('.deckpanel')) return;
+      if (e.target.closest('#btnFiltersToggle') || e.target.closest('#btnDeckToggle')) return;
+      b.classList.remove('drawer-filters', 'drawer-deck');
+    });
 
     // 首页「继续组卡」：回到上次编辑中的那份卡组
     $('btnResume').onclick = () => {
