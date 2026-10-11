@@ -118,14 +118,28 @@ scripts/          构建与校验脚本
 （涉及官方配表的解密密钥，不适合公开分发）。仓库内只保留运行与校验所需的脚本：
 
 ```
+scripts/deckcode.mjs           卡组码工具：解码 / 编码 / 往返校验
+scripts/preflight.mjs          发布前总检（语法/结构/数据/图标/体积）
 scripts/check_structure.mjs    检查 HTML/JS 元素引用一致性
-scripts/verify_encode.mjs      用真实卡组码逐字节验证加解密
-scripts/decode_deckcode.mjs    把卡组码解成可读结构
+scripts/test_subpath.mjs       验证 Pages 子路径部署不 404
+scripts/scan_secrets.mjs       提交前凭据扫描
 scripts/verify_icon_zlib.mjs   校验图标 PNG 数据完整性
 scripts/verify_icons_full.mjs  校验图标可完整渲染
-scripts/scan_secrets.mjs       提交前凭据扫描
 scripts/reencode_icons.py      把截断的 PNG 重新编码为完整 PNG
 scripts/render_wizard_mock.py  离线渲染职业按钮预览
+```
+
+## 卡组码工具
+
+```bash
+# 解码为可读结构（含卡名）
+node scripts/deckcode.mjs decode "<卡组码>"
+
+# 编码
+node scripts/deckcode.mjs encode '{"1":"赛马娘","2":881,"3":[941,941,941],"4":[]}'
+
+# 往返校验
+node scripts/deckcode.mjs selftest
 ```
 
 本项目仅用于个人组卡便利，不包含任何游戏本体内容。
