@@ -23,13 +23,14 @@ const BLOCK = [
   { re: /ghp_[A-Za-z0-9]{20,}/, why: 'GitHub PAT' },
   { re: /github_pat_/, why: 'GitHub PAT (fine-grained)' },
   { re: /«REDACTED-QQ»@qq\.com/, why: '个人邮箱' },
-  { re: /kiyasu/i, why: '个人用户名' },
+  { re: /«REDACTED-QQ»/, why: '个人 QQ 号' },
 ];
 
 // 提示级：需人工确认
 const WARN = [
   { re: /shadowverse|copyright|netease/i, why: '厂商名称（正常，仅提示）' },
-  { re: /«REDACTED-TABLEKEY»/, why: '配表解密密钥（这个 key 是从官方 so 里拿的，不是个人凭据，可保留但需你确认）' },
+  // GitHub 用户名本身就是公开信息（仓库 URL / Pages 域名都含它），只作提示
+  { re: /kiyasu/i, why: 'GitHub 用户名（公开信息，仅提示）' },
 ];
 
 const files = [];
