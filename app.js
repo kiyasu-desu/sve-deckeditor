@@ -204,7 +204,6 @@
     deck: null, decks: [],
     wizard: { poolId: null, masterSid: null, mode: 'new' },
     imgOk: 0, imgFail: 0, imgTotal: 0,
-    thumbs: {},          // md5 -> base64(webp)：卡图内联，避免浏览器发起图片请求
   };
 
   // ------------------------------------------------------------ 卡组码
@@ -482,16 +481,12 @@
   // ------------------------------------------------------------ 长按放大卡图
   function showZoom(c) {
     const img = $('zoomImg');
-    const b64 = c.md5 ? state.thumbs[c.md5] : null;
     img.onerror = null;
     if (!c.md5) {
-      img.src = b64 ? `data:image/webp;base64,${b64}` : '';
+      img.removeAttribute('src');
     } else {
-      img.src = '';                       // 先清空，避免显示上一张
-      cardImageUrl(c.md5, c.imgExt).then((url) => {
-        if (url) img.src = url;
-        else if (b64) img.src = `data:image/webp;base64,${b64}`;
-      });
+      img.removeAttribute('src');         // 先清空，避免显示上一张
+      cardImageUrl(c.md5, c.imgExt).then((url) => { if (url) img.src = url; });
     }
     const troops = troopList(c);
     $('zoomInfo').innerHTML = `<b>${c.name || c.id}</b>　${c.id}<br>`
@@ -704,13 +699,11 @@
         img.alt = '';
         img.width = 128;          // 预留 128:178 比例，加载前也占位，避免高度塌陷
         img.height = 178;
-        const b64 = state.thumbs[c.md5];
-        // 进入视口后才去 CDN 取图（解码结果进 Cache API）；失败时退回内联缩略图
+        // 进入视口后才去 CDN 取图（解码结果进 Cache API）；失败时显示占位
         state.imgTotal += 1;
         img.addEventListener('load', () => { state.imgOk += 1; updateDiag(); });
         attachCardImage(img, c.md5, c.imgExt, () => {
           state.imgFail += 1; updateDiag();
-          if (b64) { img.src = `data:image/webp;base64,${b64}`; return; }
           img.replaceWith(makeNoImg(c.name || c.id));
         });
         el.appendChild(img);
@@ -1652,12 +1645,7 @@
       if (c.sid) state.bySid.set(Number(c.sid), c);
       state.byId.set(c.id, c);
     }
-    // 卡图内联数据（GSF 图片是 base64+前缀包装，已离线解码压成 webp）
-    try {
-      const tr = await fetch('data/thumbs.json?v=' + VERSION);
-      if (tr.ok) state.thumbs = await tr.json();
-    } catch (e) { state.thumbs = {}; }
-    console.log(`[SVE ${VERSION}] thumbs loaded: ${Object.keys(state.thumbs).length}`);
+    // 卡图由浏览器直连 CDN 获取（解码后进 Cache API），不再需要内联缩略图
     buildStaticOptions();
     loadStore();
     if (!getPool(state.deck.poolId)) state.deck.poolId = 'theme:pcr';
@@ -1671,7 +1659,7 @@
     const canResume = isDraft(state.deck) && state.deck.masterSid;
     showView(savedView === 'editor' && canResume ? 'editor' : 'home');
     updateDiag();
-    console.log(`[SVE ${VERSION}] cards=${state.all.length} indexed=${state.bySid.size} pools=${POOLS.length} thumbs=${Object.keys(state.thumbs).length}`);
+    console.log(`[SVE ${VERSION}] cards=${state.all.length} indexed=${state.bySid.size} pools=${POOLS.length}`);
   }
 
   boot();

@@ -11,9 +11,8 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.dirname(path.resolve(process.argv[1] || '.'));
 const PORT = Number(process.env.PORT || 8099);
 const CACHE_DIR = path.join(ROOT, '.imgcache');
 const CDN = 'https://betasystem.gsf.netease.com/';
