@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 口袋影之诗 · 卡组编辑器  v3
  *
  * 卡组码算法还原自 app（bundle 内 decryGroupCode / generateGroupCode）：
@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v46';
+  const VERSION = 'v47';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
