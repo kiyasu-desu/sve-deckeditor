@@ -48,6 +48,46 @@ CryptoJS.AES.encrypt(
 
 卡池名与 shortId 均取自游戏内置配表，因此生成的卡组码与官方 APP 双向兼容。
 
+## 部署到 GitHub Pages
+
+本项目是纯静态站点，可直接用 Pages 托管，无需任何后端。
+
+**一键脚本**（推荐）：
+
+```powershell
+# 在本目录下执行，会依次：创建仓库 -> 推送 -> 启用 Pages
+pwsh -File push.ps1
+```
+
+需要一个有 `repo` 权限的 Personal Access Token（https://github.com/settings/tokens ）。
+也可以先用环境变量传入：`$env:GH_TOKEN='ghp_xxx'; pwsh -File push.ps1`
+
+**手动方式**：
+
+```bash
+git remote add origin https://github.com/<你的用户名>/sve-deckeditor.git
+git branch -M main
+git push -u origin main
+```
+
+然后在仓库 **Settings → Pages** 里把 Source 设为 `Deploy from a branch`，分支选 `main`、目录选 `/ (root)`。
+
+部署后地址为 `https://<你的用户名>.github.io/sve-deckeditor/`。
+
+> 已内置 `.nojekyll` 跳过 Jekyll 处理；所有资源引用都是相对路径，
+> 已用脚本 `scripts/test_subpath.mjs` 验证过子路径部署下不会 404。
+
+### 自建服务器
+
+若想用自己的服务器（首屏更快，图片走本地缓存）：
+
+```bash
+node serve.mjs          # 默认 8099，可用 PORT 环境变量修改
+```
+
+`serve.mjs` 除托管静态文件外，还提供 `/img/<md5>` 代理：从 CDN 取图、解码并落盘缓存。
+前端会自动检测（本机环境优先走代理，CDN 连续失败时也会回退），因此同一份代码两种部署都能用。
+
 ## 本地运行
 
 需要一个静态服务器（直接双击 `index.html` 会因 `file://` 限制无法加载数据）：
@@ -56,9 +96,6 @@ CryptoJS.AES.encrypt(
 node serve.mjs
 # 打开 http://127.0.0.1:8099/
 ```
-
-`serve.mjs` 除托管静态文件外，还提供 `/img/<md5>` 代理：从 CDN 取图、解码并落盘缓存，
-本地开发时首屏更快（前端会自动检测到本机环境并优先使用它）。
 
 ## 目录
 
