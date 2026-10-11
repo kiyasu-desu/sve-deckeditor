@@ -1,0 +1,53 @@
+name: Deploy to GitHub Pages
+
+# 用 Actions 自带的 GITHUB_TOKEN 部署，无需额外凭据。
+# configure-pages 的 enablement: true 会在首次运行时自动把 Pages 打开。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true          # 首次运行自动启用 Pages
+
+      - name: Stage site files
+        run: |
+          mkdir -p _site
+          # 只发布站点本身，不带仓库的 CI/工具脚本
+          for f in index.html app.js style.css style-mobile.css serve.mjs .nojekyll; do
+            [ -f "$f" ] && cp "$f" _site/
+          done
+          cp -r data icons lib _site/
+          du -sh _site
+          find _site -type f | head -20
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
