@@ -1,0 +1,55 @@
+# ============================================================
+#  SVE 卡组编辑器 —— 本仓库**只**包含可部署的静态站点（约 4.5MB）
+#  以下内容一律不得提交
+# ============================================================
+
+# ---------- 凭据与隐私（最高优先级） ----------
+# 含 appKey / udid / ssh 信息的留档
+SVE-未脱敏留档.md
+**/未脱敏*
+**/*.key
+**/*.pem
+**/session.txt
+# 模拟器数据（含登录 session）
+**/RKStorage
+**/emu/
+**/memdump/
+
+# ---------- 大体积中间产物 ----------
+# 原始 APK
+apk/
+*.apk
+# 反编译产物（Hermes bundle / 反汇编 / dex）
+**/recon/
+**/*.dex
+**/bundle.decompiled.js
+**/bundle.disasm.txt
+# 卡图缓存（约 1.8GB，运行时由浏览器从 CDN 取，不进仓库）
+**/.imgcache/
+# 内联缩略图（已由 CDN 直连方案取代）
+**/thumbs.json
+# 内存 dump
+*.bin
+# 游戏原始资源包
+**/gsf/
+
+# ---------- 破解/解密临时文件 ----------
+**/tmp/
+**/*.raw
+**/so_key_candidates.json
+
+# ---------- 系统与编辑器 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---------- 依赖（本项目无 npm 依赖，留作保险） ----------
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+venv/
