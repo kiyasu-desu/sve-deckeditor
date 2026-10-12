@@ -1,4 +1,4 @@
-/** 结构自检（针对本仓库根目录）：元素 id 引用完整、无重复 id、必需元素齐全、移动端已接入。 */
+﻿/** 结构自检（针对本仓库根目录）：元素 id 引用完整、无重复 id、必需元素齐全、移动端已接入。 */
 import fs from 'node:fs';
 
 const app = fs.readFileSync('app.js', 'utf8');
@@ -21,8 +21,8 @@ say(dup.length === 0, `HTML 无重复 id（共 ${all.length} 个）`);
 for (const id of dup) console.log(`      重复: #${id}`);
 
 // 3. 关键元素齐全
-const need = ['grid', 'deckName', 'btnPreviewDeck', 'btnStash', 'btnDel', 'btnMyDecks',
-  'btnFiltersToggle', 'btnDeckToggle', 'pvName', 'pvCount', 'pvCls', 'pvCurveChart',
+const need = ['grid', 'deckName', 'btnStash', 'btnDel', 'btnMyDecks',
+  'btnFilterBall', 'btnFiltersClose', 'btnDeckBall', 'fabCount', 'pvClear', 'pvName', 'pvCount', 'pvCls', 'pvCurveChart',
   'pvBasic', 'pvEvo', 'pvSave', 'pvImage', 'pvExport', 'pvClose', 'deckImage',
   'diBody', 'diSaveImg', 'diClose', 'myDecks', 'myList', 'wizard', 'poolList',
   'masterList', 'wizCancel', 'wizOk'];

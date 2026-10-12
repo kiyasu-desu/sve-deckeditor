@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SVE 组卡">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=47">
-<link rel="stylesheet" href="style-mobile.css?v=47">
+<link rel="stylesheet" href="style.css?v=48">
+<link rel="stylesheet" href="style-mobile.css?v=48">
 </head>
 <body>
 
@@ -52,48 +52,6 @@
   </header>
 
   <main id="main">
-    <aside class="filters">
-      <h3>筛选 <button id="btnFiltersToggle" class="collapse-btn" title="折叠/展开筛选栏">‹</button></h3>
-
-      <!-- 关键词放在最上面，不加小标题 -->
-      <input id="fText" class="filter-text" placeholder="卡名/卡号">
-
-      <!-- 常驻：费用 + 类型 -->
-      <label>费用
-        <div id="fCost" class="chips"></div>
-      </label>
-      <label>类型
-        <div id="fType" class="chips"></div>
-      </label>
-
-      <!-- 抽屉：职业（职业卡池=所选职业+中立 互斥；主题卡池=七职业多选） -->
-      <details class="drawer">
-        <summary>职业 <b id="fClsCount"></b></summary>
-        <div id="fCls" class="pick-list"></div>
-      </details>
-
-      <!-- 抽屉：稀有度 -->
-      <details class="drawer">
-        <summary>稀有度</summary>
-        <div id="fRare" class="chips"></div>
-      </details>
-
-      <!-- 抽屉：卡盒（PR 单独一盒，一行一个，行末打勾） -->
-      <details class="drawer">
-        <summary>卡盒 <b id="fBoxCount"></b></summary>
-        <div id="fBox" class="pick-list"></div>
-      </details>
-
-      <!-- 抽屉：兵种（带关键词搜索） -->
-      <details class="drawer">
-        <summary>兵种 <b id="fTroopCount"></b></summary>
-        <input id="fTroopSearch" class="drawer-search" placeholder="搜索兵种">
-        <div id="fTroop" class="pick-list"></div>
-      </details>
-
-      <div class="clear-filters"><button id="btnClearFilter">清空筛选</button></div>
-    </aside>
-
     <section class="pool">
       <div class="pool-head">
         <div class="tabs">
@@ -104,38 +62,62 @@
       </div>
       <div id="grid" class="grid"></div>
     </section>
-
-    <aside class="deckpanel">
-      <div class="deck-head">
-        <div class="deck-head-title">
-          <button id="btnDeckToggle" class="collapse-btn" title="折叠/展开卡组栏">›</button>
-          <span>我的卡组</span>
-        </div>
-        <div class="cur-pool"><span>卡池</span><b id="dPool">—</b></div>
-        <div class="cur-master"><span>主战者</span><b id="dMasterName">—</b></div>
-        <div class="counts">
-          <span>基础 <b id="cBasic">0</b>/40</span>
-          <span>进化 <b id="cEvo">0</b>/10</span>
-          <span>合计 <b id="cTotal">0</b>/50</span>
-        </div>
-        <div id="warn" class="warn"></div>
-        <div class="deck-tools">
-          <button id="btnClearDeck">清空卡组</button>
-          <button id="btnPreviewDeck" class="primary">查看卡组</button>
-        </div>
-      </div>
-      <div class="deck-rows">
-        <div class="deck-row basic-row">
-          <h4>基础卡组 <span id="nBasic">0</span> <em>/ 40~50</em></h4>
-          <div id="listBasic" class="deck-list"></div>
-        </div>
-        <div class="deck-row evo-row">
-          <h4>进化卡组 <span id="nEvo">0</span> <em>/ 0~10</em></h4>
-          <div id="listEvo" class="deck-list"></div>
-        </div>
-      </div>
-    </aside>
   </main>
+
+  <!-- ============ 左下角：筛选悬浮球 + 覆盖式抽屉 ============ -->
+  <button id="btnFilterBall" class="fab fab-left" title="筛选" aria-label="筛选">
+    <span class="fab-ico">⚙</span>
+  </button>
+
+  <aside class="filters" id="filtersPanel">
+    <div class="filters-head">
+      <span>筛选</span>
+      <button id="btnFiltersClose" class="collapse-btn" title="收起筛选">×</button>
+    </div>
+
+    <!-- 关键词放在最上面，不加小标题 -->
+    <input id="fText" class="filter-text" placeholder="卡名/卡号">
+
+    <!-- 常驻：费用 + 类型 -->
+    <label>费用
+      <div id="fCost" class="chips"></div>
+    </label>
+    <label>类型
+      <div id="fType" class="chips"></div>
+    </label>
+
+    <!-- 抽屉：职业（职业卡池=所选职业+中立 互斥；主题卡池=七职业多选） -->
+    <details class="drawer">
+      <summary>职业 <b id="fClsCount"></b></summary>
+      <div id="fCls" class="pick-list"></div>
+    </details>
+
+    <!-- 抽屉：稀有度 -->
+    <details class="drawer">
+      <summary>稀有度</summary>
+      <div id="fRare" class="chips"></div>
+    </details>
+
+    <!-- 抽屉：卡盒（PR 单独一盒，一行一个，行末打勾） -->
+    <details class="drawer">
+      <summary>卡盒 <b id="fBoxCount"></b></summary>
+      <div id="fBox" class="pick-list"></div>
+    </details>
+
+    <!-- 抽屉：兵种（带关键词搜索） -->
+    <details class="drawer">
+      <summary>兵种 <b id="fTroopCount"></b></summary>
+      <input id="fTroopSearch" class="drawer-search" placeholder="搜索兵种">
+      <div id="fTroop" class="pick-list"></div>
+    </details>
+
+    <div class="clear-filters"><button id="btnClearFilter">清空筛选</button></div>
+  </aside>
+
+  <!-- ============ 右下角：卡组悬浮球 ============ -->
+  <button id="btnDeckBall" class="fab fab-right" title="查看卡组" aria-label="查看卡组">
+    <span class="fab-count"><b id="fabCount">0</b><em>/50</em></span>
+  </button>
 </div>
 
 <!-- ================= 向导 ================= -->
@@ -209,11 +191,14 @@
       <div id="pvEvo" class="preview-cards"></div>
     </div>
 
-    <!-- 底部：右下角生成卡组码 -->
+    <!-- 底部：左清空 · 右导出 -->
     <div class="preview-foot">
-      <button id="pvSave">保存卡组</button>
-      <button id="pvImage">查看图片</button>
-      <button id="pvExport" class="primary">生成卡组码</button>
+      <button id="pvClear" class="danger">清空卡组</button>
+      <div class="pf-right">
+        <button id="pvSave">保存卡组</button>
+        <button id="pvImage">查看图片</button>
+        <button id="pvExport" class="primary">生成卡组码</button>
+      </div>
     </div>
   </div>
 </div>
@@ -258,6 +243,6 @@
 <div id="tip" class="tip hidden"></div>
 
 <script src="lib/crypto-js.js"></script>
-<script src="app.js?v=47"></script>
+<script src="app.js?v=48"></script>
 </body>
 </html>

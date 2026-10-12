@@ -1,10 +1,10 @@
 /* ============================================================
-   移动端适配
-   触摸设备：点卡片在**图片中间浮出增减控件**，点别处收起
-   窄屏：左右两栏改为覆盖式抽屉，卡池单栏满宽
+   移动端 / 窄屏适配
+   布局本身已是「卡池单栏 + 覆盖式筛选抽屉 + 两个悬浮球」，
+   这里只做尺寸与间距上的微调。
    ============================================================ */
 
-/* ---------- 卡片上的数量浮层 ---------- */
+/* ---------- 卡片上的数量浮层（触摸设备点卡片时浮出） ---------- */
 .card { position: relative; }
 
 .qty-overlay {
@@ -35,59 +35,18 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
 }
 
-/* 已投入卡组的数量由 .card .cnt 角标显示，这里不再重复 */
+/* 已投入卡组的数量由 .card .cnt 角标显示 */
 
-/* ---------- 触摸设备上的卡片尺寸 ---------- */
+/* ---------- 触摸设备 ---------- */
 body.is-touch .card img { height: 168px; }
 body.is-touch .card { cursor: pointer; }
 body.is-touch #poolHint { display: none; }
 
-/* ---------- 窄屏布局 ---------- */
+/* ---------- 窄屏 ---------- */
 @media (max-width: 860px) {
   header { flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
   .deckbar { flex: 1 1 100%; order: 99; }
   .diag { display: none; }
-
-  main { grid-template-columns: 1fr !important; }
-
-  /* 两侧栏改为覆盖式抽屉 */
-  .filters, .deckpanel {
-    position: fixed; top: 0; bottom: 0; z-index: 40;
-    width: min(88vw, 360px); background: var(--bg2);
-    box-shadow: 0 0 24px rgba(0, 0, 0, .5);
-    transition: transform .18s ease;
-    overflow-y: auto;
-  }
-  .filters { left: 0; transform: translateX(-103%); border-right: 1px solid var(--line); }
-  .deckpanel { right: 0; transform: translateX(103%); border-left: 1px solid var(--line); }
-  body.drawer-filters .filters { transform: none; }
-  body.drawer-deck .deckpanel { transform: none; }
-
-  /* 抽屉打开时的遮罩 */
-  body.drawer-filters::after,
-  body.drawer-deck::after {
-    content: ''; position: fixed; inset: 0; z-index: 39;
-    background: rgba(0, 0, 0, .5);
-  }
-
-  /* 窄屏下取消桌面端的「压成窄条」折叠 */
-  main.hide-filters, main.hide-deck { --fw: 200px; --dw: 330px; }
-  main.hide-filters .filters > :not(h3) { display: revert; }
-  main.hide-filters .filters h3 { font-size: revert; justify-content: space-between; padding: 0; }
-  main.hide-deck .deckpanel .deck-head > :not(.deck-head-title) { display: revert; }
-  main.hide-deck .deckpanel .deck-head-title > span { display: revert; }
-  main.hide-deck .deckpanel > :not(.deck-head) { display: revert; }
-  main.hide-filters .filters .collapse-btn,
-  main.hide-deck .deckpanel .deck-head-title .collapse-btn {
-    width: 30px; height: 28px; border-radius: 6px;
-  }
-  main.hide-filters .filters { padding: 12px; }
-  main.hide-deck .deckpanel .deck-head { padding: 12px; flex: none; }
-
-  /* 卡组区在抽屉里改为自然高度滚动 */
-  .deck-rows { flex: none; }
-  .deck-row.basic-row { flex: none; max-height: 50vh; }
-  .deck-row.evo-row .deck-list { max-height: 32vh; }
 
   /* 弹窗改满屏 */
   .preview-box, .deckimg-box, .wizard-box, .mysaved-box {
@@ -96,6 +55,13 @@ body.is-touch #poolHint { display: none; }
   .pool-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
   .preview-summary { grid-template-columns: auto 1fr; gap: 10px; }
   .pv-curvebox { grid-column: 1 / -1; }
+
+  /* 底部悬浮球避开手势区 */
+  .fab { bottom: max(18px, env(safe-area-inset-bottom, 0px) + 14px); }
+  .fab-left { left: 16px; }
+  .fab-right { right: 16px; }
+  /* 卡池底部留出悬浮球的空间，避免最后一行被遮住 */
+  .grid { padding-bottom: 86px; }
 }
 
 @media (max-width: 520px) {
@@ -104,4 +70,8 @@ body.is-touch #poolHint { display: none; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
   .qty-overlay { height: 168px; }
   .qty-overlay .qty-b { width: 36px; height: 36px; font-size: 20px; }
+
+  /* 查看卡组底部按钮换行，别挤在一起 */
+  .preview-foot { flex-wrap: wrap; }
+  .pf-right { flex: 1 1 100%; justify-content: flex-end; }
 }

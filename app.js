@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v47';
+  const VERSION = 'v48';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -180,7 +180,6 @@
   // 窄屏（手机/平板竖屏）把左右两栏改成覆盖式抽屉。
   const IS_TOUCH = (typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches)
     || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
-  const NARROW = () => (typeof matchMedia !== 'undefined' && matchMedia('(max-width: 860px)').matches);
 
   // 费用档位（筛选与费用曲线共用）：1- 表示 1 费及以下，8+ 表示 8 费及以上
   const COST_LABELS = ['1-', '2', '3', '4', '5', '6', '7', '8+'];
@@ -768,50 +767,16 @@
   }
 
   // ------------------------------------------------------------ 渲染：卡组
+  // 右侧卡组栏已取消，这里只更新「卡组名」和右下角悬浮球的张数。
+  // 卡组详情统一在「查看卡组」弹窗里呈现（打开时重新渲染）。
   function renderDeck() {
     const d = state.deck;
     $('deckName').value = d.name;
-    $('dPool').textContent = poolDisplayName(d.poolId);
-    const mc = d.masterSid ? state.bySid.get(Number(d.masterSid)) : null;
-    $('dMasterName').textContent = mc ? (mc.name || mc.id) : '— 未选择 —';
     renderClsFilter();     // 职业筛选项取决于当前卡池是职业还是主题
 
-    for (const side of ['basic', 'evo']) {
-      const box = $(side === 'basic' ? 'listBasic' : 'listEvo');
-      const entries = Object.entries(d[side]).sort((a, b) => Number(a[0]) - Number(b[0]));
-      const frag = document.createDocumentFragment();
-      for (const [sid, cnt] of entries) {
-        const c = state.bySid.get(Number(sid));
-        const row = document.createElement('div');
-        row.className = 'deck-item';
-        row.innerHTML = `<span class="dn" title="${c ? c.id : sid}">${c ? (c.name || c.id) : '未知卡'}</span>`
-          + `<button data-act="minus">−</button><span class="dc">${cnt}</span><button data-act="plus">+</button>`;
-        row.querySelector('[data-act=minus]').onclick = () => { if (c) addCard(c, -1); };
-        row.querySelector('[data-act=plus]').onclick = () => { if (c) { state.side = side; addCard(c, 1); } };
-        frag.appendChild(row);
-      }
-      box.replaceChildren(frag);
-      // 进化卡组为空时收起列表，把空间全留给基础卡组
-      if (side === 'evo') {
-        const row = box.closest('.deck-row');
-        if (row) row.classList.toggle('empty', entries.length === 0);
-      }
-    }
-
     const n = deckCounts(d);
-    $('cBasic').textContent = n.basic;
-    $('cEvo').textContent = n.evo;
-    $('cTotal').textContent = n.total;
-    $('nBasic').textContent = n.basic;
-    $('nEvo').textContent = n.evo;
-
-    const w = $('warn');
-    const problems = [];
-    if (!d.masterSid) problems.push('① 请先选择主战者');
-    if (n.basic < LIMIT.basicMin || n.basic > LIMIT.basicMax) problems.push(`基础卡组需 ${LIMIT.basicMin}-${LIMIT.basicMax} 张（当前 ${n.basic}）`);
-    if (n.evo < LIMIT.evoMin || n.evo > LIMIT.evoMax) problems.push(`进化卡组需 ${LIMIT.evoMin}-${LIMIT.evoMax} 张（当前 ${n.evo}）`);
-    if (problems.length) { w.className = 'warn bad'; w.textContent = problems.join('；'); }
-    else { w.className = 'warn ok'; w.textContent = '✓ 卡组合法，可导出卡组码'; }
+    $('fabCount').textContent = n.total;
+    $('btnDeckBall').classList.toggle('full', isLegal(d));
   }
 
   // ------------------------------------------------------------ 向导
@@ -1481,37 +1446,26 @@
 
     $('deckName').onchange = (e) => { state.deck.name = e.target.value || '未命名'; saveStore(); };
 
-    // 左右两栏折叠（桌面：压成窄条；窄屏：改为覆盖式抽屉）
-    const togglePane = (which) => {
-      const isFilters = which === 'filters';
-      if (NARROW()) {
-        // 窄屏下按钮变成抽屉开关，一次只开一个
-        const body = document.body;
-        const want = isFilters ? 'drawer-filters' : 'drawer-deck';
-        const other = isFilters ? 'drawer-deck' : 'drawer-filters';
-        const on = body.classList.contains(want);
-        body.classList.remove(other);
-        body.classList.toggle(want, !on);
-        return;
-      }
-      const cls = isFilters ? 'hide-filters' : 'hide-deck';
-      const main = $('main');
-      main.classList.toggle(cls);
-      const hidden = main.classList.contains(cls);
-      $(isFilters ? 'btnFiltersToggle' : 'btnDeckToggle').textContent =
-        isFilters ? (hidden ? '›' : '‹') : (hidden ? '‹' : '›');
+    // ---------------- 筛选抽屉（左下角悬浮球开关，覆盖在卡池上方）----------------
+    const setFilters = (open) => {
+      document.body.classList.toggle('filters-open', open);
+      $('btnFilterBall').classList.toggle('fab-active', open);
     };
-    $('btnFiltersToggle').onclick = () => togglePane('filters');
-    $('btnDeckToggle').onclick = () => togglePane('deck');
-    // 点抽屉外的遮罩关闭
-    document.addEventListener('click', (e) => {
-      if (!NARROW()) return;
-      const b = document.body;
-      if (!b.classList.contains('drawer-filters') && !b.classList.contains('drawer-deck')) return;
-      if (e.target.closest('.filters') || e.target.closest('.deckpanel')) return;
-      if (e.target.closest('#btnFiltersToggle') || e.target.closest('#btnDeckToggle')) return;
-      b.classList.remove('drawer-filters', 'drawer-deck');
-    });
+    $('btnFilterBall').onclick = (e) => {
+      e.stopPropagation();
+      setFilters(!document.body.classList.contains('filters-open'));
+    };
+    $('btnFiltersClose').onclick = () => setFilters(false);
+    // 点抽屉以外的任何地方都收起（遮罩、卡池、其它按钮都算）
+    document.addEventListener('pointerdown', (e) => {
+      if (!document.body.classList.contains('filters-open')) return;
+      if (e.target.closest('.filters')) return;          // 抽屉内部
+      if (e.target.closest('#btnFilterBall')) return;    // 悬浮球自己处理开关
+      setFilters(false);
+    }, true);
+
+    // ---------------- 卡组悬浮球（右下角，点开查看卡组）----------------
+    $('btnDeckBall').onclick = () => openPreview();
 
     // 首页「继续组卡」：回到上次编辑中的那份卡组
     $('btnResume').onclick = () => {
@@ -1538,9 +1492,6 @@
     };
     $('btnBackHome').onclick = () => { saveStore(); showView('home'); };
 
-    // 卡池与主战者在向导里一次确定；组卡页不再提供「更换卡池」，改为「清空卡组」
-    $('btnClearDeck').onclick = clearDeck;
-
     // 顶栏「保存」：合法 → 正式保存；不合法 → 暂存（半成品，下次可继续）
     $('btnStash').onclick = () => { saveDeck(); showView('home'); };
     $('btnDel').onclick = () => {
@@ -1562,9 +1513,17 @@
     $('myClose2').onclick = closeMyDecks;
     $('myDecks').addEventListener('click', (e) => { if (e.target.id === 'myDecks') closeMyDecks(); });
 
-    // 查看卡组弹窗
-    $('btnPreviewDeck').onclick = openPreview;
+    // 查看卡组弹窗（入口是右下角悬浮球）
     $('pvClose').onclick = closePreview;
+    // 清空卡组：清掉后立刻关闭窗口，回到卡池
+    $('pvClear').onclick = () => {
+      state.deck.basic = {};
+      state.deck.evo = {};
+      saveStore();
+      closePreview();
+      renderAll();
+      toast('已清空卡组');
+    };
     $('pvSave').onclick = () => {
       saveDeck();
       closePreview();
