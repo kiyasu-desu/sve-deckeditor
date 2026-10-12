@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v49';
+  const VERSION = 'v50';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -1018,7 +1018,7 @@
         renderPreview();
       };
 
-      row.append(minus, cnt, plus, body);
+      row.append(body, minus, cnt, plus);
       frag.appendChild(row);
     }
     box.appendChild(frag);

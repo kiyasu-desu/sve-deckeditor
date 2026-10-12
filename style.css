@@ -260,29 +260,32 @@ aside, section { min-height: 0; }
 .di {
   position: relative;
   display: flex; align-items: center; gap: 8px;
-  padding: 7px 9px;
+  padding: 8px 10px;
+  min-height: 54px;
   border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg3);
   overflow: hidden;
   isolation: isolate;
 }
-/* 剪影：把卡图放大、去色、压暗后作为底纹铺在右侧，既认得出是哪张卡又不喧宾夺主 */
+/* 剪影：把整张卡图按行宽缩放铺满一行（background-size:100% auto），
+   再通过 background-position-y 把「卡牌从上往下 1/3 处」对到行的垂直中心。
+   卡图很高（约 744x1039），所以实际看到的是一条横向切片 —— 以卡面上部为主，便于认卡。 */
 .di::before {
   content: '';
   position: absolute; inset: 0; z-index: -1;
   background-image: var(--sil, none);
   background-repeat: no-repeat;
-  background-position: right -14px center;
-  background-size: auto 190%;
-  filter: grayscale(1) brightness(.42) contrast(1.15);
-  opacity: .5;
+  background-size: 100% auto;
+  background-position: center 33%;
+  filter: grayscale(.85) brightness(.78) contrast(1.05);
+  opacity: .55;
   pointer-events: none;
 }
-/* 让文字从剪影上「浮起来」 */
+/* 左侧压暗，保证卡名与卡号可读；右侧留亮，剪影看得清 */
 .di::after {
   content: '';
   position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(90deg, var(--bg3) 46%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(90deg, rgba(8, 12, 18, .94) 0%, rgba(8, 12, 18, .78) 42%, rgba(8, 12, 18, .18) 100%);
   pointer-events: none;
 }
 .di:hover { border-color: var(--accent); }

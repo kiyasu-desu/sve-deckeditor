@@ -53,15 +53,41 @@ body.is-touch #poolHint { display: none; }
     width: 96vw; height: 92vh; max-height: 92vh;
   }
   .pool-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
-  .preview-summary { grid-template-columns: auto 1fr; gap: 10px; }
+
+  /* 查看卡组：信息区压缩，把空间尽量留给卡组列表 */
+  .preview-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px; margin: 6px 0 8px;
+  }
+  .pv-master img { width: 74px; height: 105px; border-radius: 6px; }
+  .pv-stats { gap: 2px; }
+  .pv-row { font-size: 12px; gap: 6px; }
+  /* 主战者卡图右侧的统计压成两列，省一行高度 */
+  .pv-stats {
+    display: grid; grid-template-columns: 1fr 1fr;
+    align-content: center;
+  }
   .pv-curvebox { grid-column: 1 / -1; }
+  .pv-total { text-align: left; font-size: 13px; }
+  .pv-total b { font-size: 16px; }
+  .curve-chart { height: 62px; gap: 3px; }
+  .curve-bar .cb-n { font-size: 10px; }
+
+  /* 卡组行在窄屏下更紧凑 */
+  .di { min-height: 48px; padding: 6px 8px; gap: 6px; }
+  .di-name { font-size: 12px; }
+  .di-sub { font-size: 10px; }
+  .di-b { width: 28px; height: 28px; font-size: 15px; }
+  .di-c { font-size: 14px; min-width: 18px; }
+
+  .preview-body { padding: 8px 9px; }
 
   /* 底部悬浮球避开手势区 */
-  .fab { bottom: max(18px, env(safe-area-inset-bottom, 0px) + 14px); }
+  .fab { bottom: max(44px, env(safe-area-inset-bottom, 0px) + 34px); }
   .fab-left { left: 16px; }
   .fab-right { right: 16px; }
   /* 卡池底部留出悬浮球的空间，避免最后一行被遮住 */
-  .grid { padding-bottom: 86px; }
+  .grid { padding-bottom: 110px; }
 }
 
 @media (max-width: 520px) {
