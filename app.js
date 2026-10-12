@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v48';
+  const VERSION = 'v49';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -680,10 +680,14 @@
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQtyCard(); });
   }
 
+  // sid -> 网格里的卡片元素，用于增删时局部更新角标（避免整块重绘）
+  const gridCards = new Map();
+
   function renderGrid() {
     const list = filteredCards();
 
     const grid = $('grid');
+    gridCards.clear();
     const frag = document.createDocumentFragment();
     for (const c of list) {
       const el = document.createElement('div');
@@ -722,6 +726,7 @@
         cnt.textContent = n;
         el.appendChild(cnt);
       }
+      if (c.sid) gridCards.set(String(c.sid), el);   // 供增删时局部更新角标
 
       const meta = document.createElement('div');
       meta.className = 'meta';
@@ -734,6 +739,23 @@
     grid.replaceChildren(frag);
     restoreQtyCard();       // 重绘后把数量浮层挂回同一张卡
     updateDiag();
+  }
+
+  // 增删卡牌时只更新那一张卡的角标，避免整块重绘 —— 重绘会让所有 <img> 重新走一遍
+  // 懒加载与解码，表现为「所有卡图闪一下 + 卡顿」。
+  function updateCardBadge(sid) {
+    if (!sid) return;
+    const el = gridCards.get(String(sid));
+    if (!el) return;
+    const n = inDeckCount(sid);
+    let cnt = el.querySelector('.cnt');
+    if (n === 0) { if (cnt) cnt.remove(); return; }
+    if (!cnt) {
+      cnt = document.createElement('div');
+      cnt.className = 'cnt';
+      el.appendChild(cnt);
+    }
+    cnt.textContent = n;
   }
 
   function addCard(c, delta) {
@@ -762,7 +784,8 @@
       if (cur === 1) delete state.deck[side][c.sid]; else state.deck[side][c.sid] = cur - 1;
     }
     saveStore();
-    renderGrid();
+    // 只更新这一张卡的角标：整块重绘会让所有卡图重新加载（闪一下 + 卡顿）
+    updateCardBadge(c.sid);
     renderDeck();
   }
 
@@ -771,7 +794,6 @@
   // 卡组详情统一在「查看卡组」弹窗里呈现（打开时重新渲染）。
   function renderDeck() {
     const d = state.deck;
-    $('deckName').value = d.name;
     renderClsFilter();     // 职业筛选项取决于当前卡池是职业还是主题
 
     const n = deckCounts(d);
@@ -928,34 +950,82 @@
     return items;
   }
 
-  // 平铺渲染：有几张就画几张图
-  function renderPreviewList(id, map) {
+  // 每张卡一行：左侧数量增减，卡名，背景用卡图做「剪影」水印，便于辨认
+  function renderPreviewList(id, map, side) {
     const box = $(id);
-    const items = expandDeckList(map);
+    // expandDeckList 是「一张一份」，这里按 sid 合并成「每卡一行 + 数量」
+    const grouped = new Map();
+    for (const it of expandDeckList(map)) {
+      const g = grouped.get(it.sid);
+      if (g) g.n += 1; else grouped.set(it.sid, { sid: it.sid, c: it.c, n: 1 });
+    }
+    const items = [...grouped.values()];
     if (!items.length) { box.innerHTML = '<div class="preview-empty">（空）</div>'; return; }
 
     box.replaceChildren();
     const frag = document.createDocumentFragment();
     for (const it of items) {
-      const card = document.createElement('div');
-      card.className = 'pv-card';
       const c = it.c;
-      card.title = c ? (c.name || c.id) : '未知卡';
-      const im = document.createElement('img');
-      im.loading = 'lazy';
-      im.alt = '';
-      if (c && c.md5) attachCardImage(im, c.md5, c.imgExt);
-      card.appendChild(im);
-      const cost = document.createElement('span');
-      cost.className = 'pv-cost';
-      cost.textContent = c && typeof c.cost === 'number' ? c.cost : '–';
-      card.appendChild(cost);
-      frag.appendChild(card);
+      const sid = it.sid;
+      const row = document.createElement('div');
+      row.className = 'di';
+      row.dataset.sid = sid;
+      if (!c) row.classList.add('unknown');
+
+      // 剪影：用卡图做低透明度底纹（拿不到图时退化为纯色块）
+      if (c && c.md5) {
+        cardImageUrl(c.md5, c.imgExt).then((url) => {
+          if (url && row.isConnected) row.style.setProperty('--sil', `url("${url}")`);
+        });
+      }
+
+      const minus = document.createElement('button');
+      minus.className = 'di-b';
+      minus.textContent = '−';
+      minus.title = '减少一张';
+
+      const plus = document.createElement('button');
+      plus.className = 'di-b';
+      plus.textContent = '＋';
+      plus.title = '增加一张';
+
+      const cnt = document.createElement('span');
+      cnt.className = 'di-c';
+      cnt.textContent = it.n;
+
+      const body = document.createElement('div');
+      body.className = 'di-body';
+      const nm = document.createElement('div');
+      nm.className = 'di-name';
+      nm.textContent = c ? (c.name || c.id) : `未知卡 ${sid}`;
+      const sub = document.createElement('div');
+      sub.className = 'di-sub';
+      sub.textContent = c
+        ? `${c.id} · 费用 ${c.cost ?? '-'} · ${c.cls || '-'}`
+        : `sid ${sid}`;
+      body.append(nm, sub);
+
+      minus.onclick = () => {
+        if (!c) return;
+        state.side = side;
+        addCard(c, -1);
+        renderPreview();
+      };
+      plus.onclick = () => {
+        if (!c) return;
+        state.side = side;
+        addCard(c, 1);
+        renderPreview();
+      };
+
+      row.append(minus, cnt, plus, body);
+      frag.appendChild(row);
     }
     box.appendChild(frag);
   }
 
-  function openPreview() {
+  // 重新渲染「查看卡组」的内容（不改开关状态），供数量增减后调用
+  function renderPreview() {
     const d = state.deck;
     const n = deckCounts(d);
     const mc = d.masterSid ? state.bySid.get(Number(d.masterSid)) : null;
@@ -1009,10 +1079,14 @@
     btn.textContent = legal ? '生成卡组码' : '未达组卡要求，无法生成';
     btn.title = legal ? '' : `需要 基础 ${LIMIT.basicMin}-${LIMIT.basicMax} 张、进化 ${LIMIT.evoMin}-${LIMIT.evoMax} 张，且已选主战者`;
 
-    renderPreviewList('pvBasic', d.basic);
-    renderPreviewList('pvEvo', d.evo);
+    renderPreviewList('pvBasic', d.basic, 'basic');
+    renderPreviewList('pvEvo', d.evo, 'evo');
     $('pvBasicN').textContent = n.basic;
     $('pvEvoN').textContent = n.evo;
+  }
+
+  function openPreview() {
+    renderPreview();
     $('preview').classList.remove('hidden');
   }
 
@@ -1133,6 +1207,17 @@
     if (n.total === 0) { toast('卡组已经是空的'); return; }
     modal('清空卡组', `确定要清空「${d.name}」的全部 ${n.total} 张卡吗？此操作不可撤销。`, '', 'plain');
     $('modalOk').dataset.mode = 'clear';
+  }
+
+  // 直接清空，不走确认框（用于「查看卡组」里的清空按钮）
+  function clearDeckNow() {
+    if (deckCounts(state.deck).total === 0) { toast('卡组已经是空的'); return false; }
+    state.deck.basic = {};
+    state.deck.evo = {};
+    saveStore();
+    renderDeck();
+    renderGrid();
+    return true;
   }
 
   // 保存：合法 → 正式保存（会出现在「我的卡组」）；不合法 → 暂存（半成品，可继续编辑）
@@ -1444,8 +1529,6 @@
       };
     });
 
-    $('deckName').onchange = (e) => { state.deck.name = e.target.value || '未命名'; saveStore(); };
-
     // ---------------- 筛选抽屉（左下角悬浮球开关，覆盖在卡池上方）----------------
     const setFilters = (open) => {
       document.body.classList.toggle('filters-open', open);
@@ -1492,17 +1575,8 @@
     };
     $('btnBackHome').onclick = () => { saveStore(); showView('home'); };
 
-    // 顶栏「保存」：合法 → 正式保存；不合法 → 暂存（半成品，下次可继续）
-    $('btnStash').onclick = () => { saveDeck(); showView('home'); };
-    $('btnDel').onclick = () => {
-      state.deck.basic = {};
-      state.deck.evo = {};
-      state.deck.masterSid = null;
-      state.deck.saved = false;
-      saveStore();
-      showView('home');
-      toast('已删除当前卡组');
-    };
+    // 顶栏「清空卡组」：命名与保存都挪到「查看卡组」弹窗里
+    $('btnClearTop').onclick = clearDeck;
 
     // 卡组码只从「查看卡组」弹窗里生成，组卡界面不再放导出按钮
     $('btnImport').onclick = importCode;
@@ -1517,17 +1591,14 @@
     $('pvClose').onclick = closePreview;
     // 清空卡组：清掉后立刻关闭窗口，回到卡池
     $('pvClear').onclick = () => {
-      state.deck.basic = {};
-      state.deck.evo = {};
-      saveStore();
+      if (!clearDeckNow()) return;
       closePreview();
-      renderAll();
       toast('已清空卡组');
     };
+    // 保存：先让用户给卡组命名，再落库
     $('pvSave').onclick = () => {
-      saveDeck();
-      closePreview();
-      showView('home');
+      modal('保存卡组', '给这副卡组起个名字（最多 20 字）', state.deck.name || '', 'input');
+      $('modalOk').dataset.mode = 'saveNamed';
     };
     // 生成卡组码时不关闭查看卡组窗口
     $('pvExport').onclick = () => exportCode();
@@ -1553,11 +1624,17 @@
       $('modalOk').dataset.mode = '';
       if (mode === 'import') doImport();
       else if (mode === 'clear') {
-        state.deck.basic = {};
-        state.deck.evo = {};
-        saveStore(); closeModal(); renderAll();
-        toast('已清空卡组');
+        clearDeckNow(); closeModal(); toast('已清空卡组');
       } else if (mode === 'newdeck') { closeModal(); startNewDeck(); }
+      else if (mode === 'saveNamed') {
+        const name = ($('modalText').value || '').trim().slice(0, 20);
+        if (!name) { toast('请填写卡组名称'); return; }
+        state.deck.name = name;
+        saveDeck();
+        closeModal();
+        closePreview();
+        showView('home');
+      }
       else closeModal();
     };
     $('modalCopy').onclick = async () => {

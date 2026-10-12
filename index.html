@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SVE 组卡">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=48">
-<link rel="stylesheet" href="style-mobile.css?v=48">
+<link rel="stylesheet" href="style.css?v=49">
+<link rel="stylesheet" href="style-mobile.css?v=49">
 </head>
 <body>
 
@@ -43,11 +43,7 @@
   <header>
     <button id="btnBackHome" title="返回首页">←</button>
     <div class="brand">SVE 卡组编辑器 <span class="ver" id="ver">v5</span></div>
-    <div class="deckbar">
-      <input id="deckName" placeholder="卡组名称" maxlength="20">
-      <button id="btnStash" class="primary" title="保存卡组并返回首页">保存</button>
-      <button id="btnDel" title="清空该卡组并返回首页">删除</button>
-    </div>
+    <button id="btnClearTop" class="danger" title="清空当前卡组（命名与保存在「查看卡组」里）">清空卡组</button>
     <div class="diag" id="diag2"></div>
   </header>
 
@@ -243,6 +239,6 @@
 <div id="tip" class="tip hidden"></div>
 
 <script src="lib/crypto-js.js"></script>
-<script src="app.js?v=48"></script>
+<script src="app.js?v=49"></script>
 </body>
 </html>
