@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SVE 组卡">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=56">
-<link rel="stylesheet" href="style-mobile.css?v=56">
+<link rel="stylesheet" href="style.css?v=57">
+<link rel="stylesheet" href="style-mobile.css?v=57">
 </head>
 <body>
 
@@ -22,7 +22,6 @@
   <div class="home-card">
     <div class="home-logo">口袋影之诗</div>
     <h1>卡组编辑器</h1>
-    <p class="home-sub">离线组卡 · 一键导出官方 app 可用的卡组码</p>
     <button id="btnStart" class="primary big">开始组卡</button>
     <button id="btnResume" class="big-ghost">继续组卡</button>
     <button id="btnMyDecks" class="big-ghost">我的卡组</button>
@@ -31,20 +30,15 @@
       已有卡组 <b id="homeDeckCount">0</b> 套
       <span id="homeDeckInfo"></span>
     </div>
-    <div class="home-note">
-      提示：点击「开始组卡」后需先选择<strong>卡池</strong>与<strong>主战者</strong>，再进入组卡。
-    </div>
   </div>
-  <div class="diag home-diag" id="diag">初始化…</div>
 </div>
 
 <!-- ================= 组卡界面 ================= -->
 <div id="viewEditor" class="view hidden">
   <header>
     <button id="btnBackHome" title="返回首页">←</button>
-    <div class="brand">SVE 卡组编辑器 <span class="ver" id="ver">v5</span></div>
+    <div class="brand">SVE 卡组编辑器</div>
     <button id="btnClearTop" class="danger" title="清空当前卡组（命名与保存在「查看卡组」里）">清空卡组</button>
-    <div class="diag" id="diag2"></div>
   </header>
 
   <main id="main">
@@ -54,7 +48,6 @@
           <button class="tab active" data-side="basic">基础卡组</button>
           <button class="tab" data-side="evo">进化卡组</button>
         </div>
-        <div class="hint" id="poolHint"></div>
       </div>
       <div id="grid" class="grid"></div>
     </section>
@@ -245,6 +238,6 @@
 <div id="tip" class="tip hidden"></div>
 
 <script src="lib/crypto-js.js"></script>
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 </body>
 </html>

@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v56';
+  const VERSION = 'v57';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -307,38 +307,8 @@
     my.disabled = saved.length === 0;
     my.title = saved.length ? `查看已保存的 ${saved.length} 副卡组` : '还没有保存过卡组';
   }
-  function updateDiag() {
-    const base = `${VERSION} · 图片 ${state.imgOk}/${state.imgTotal}`
-      + (state.imgFail ? `（失败 ${state.imgFail}）` : '');
-    for (const id of ['diag', 'diag2']) {
-      const el = $(id);
-      if (!el) continue;
-      el.textContent = base;
-      el.className = 'diag' + (state.imgFail ? ' bad' : (state.imgOk && state.imgOk === state.imgTotal ? ' ok' : ''));
-    }
-    scheduleSizeCheck();
-  }
-
-  // 尺寸自检：把「卡片/图框/原图」的实际像素尺寸显示出来，便于定位布局问题
-  let sizeTimer = null;
-  function scheduleSizeCheck() {
-    if (sizeTimer || !$('diag2')) return;
-    sizeTimer = setTimeout(() => {
-      sizeTimer = null;
-      const card = document.querySelector('#grid .card');
-      const img = card && card.querySelector('img');
-      if (!card) return;
-      const cr = card.getBoundingClientRect();
-      const ir = img ? img.getBoundingClientRect() : null;
-      const info = `卡片 ${Math.round(cr.width)}×${Math.round(cr.height)}`
-        + (ir ? ` · 图框 ${Math.round(ir.width)}×${Math.round(ir.height)}` : '')
-        + (img ? ` · 原图 ${img.naturalWidth}×${img.naturalHeight}` : '')
-        + ` · 视口 ${window.innerWidth}×${window.innerHeight} · dpr ${window.devicePixelRatio}`;
-      const el = $('diag2');
-      if (el) el.textContent = `${VERSION} · ${info}`;
-      console.log('[SVE size]', info);
-    }, 500);
-  }
+  // 诊断信息已移除（原先在页面角落显示版本/图片计数/元素尺寸）
+  function updateDiag() { /* no-op：保留调用点以降低改动风险 */ }
   // mode: 'input' 可编辑输入框 / 'code' 只读显示（自动全选）/ 'plain' 纯确认框
   function modal(title, desc, text, mode) {
     $('modalTitle').textContent = title;
@@ -1663,9 +1633,6 @@
         document.querySelectorAll('.tab').forEach((x) => x.classList.remove('active'));
         t.classList.add('active');
         state.side = t.dataset.side;
-        $('poolHint').textContent = state.side === 'basic'
-          ? `左键加入基础卡组 · 右键移除（随从/护符/法术，同名卡合计最多 ${LIMIT.per} 张，共 ${LIMIT.basicMin}-${LIMIT.basicMax} 张）`
-          : `左键加入进化卡组 · 右键移除（进化卡/萝卜/adv，共 ${LIMIT.evoMin}-${LIMIT.evoMax} 张）`;
         renderGrid();          // 切换分区要重新过滤卡池
       };
     });
@@ -1813,7 +1780,6 @@
   }
 
   async function boot() {
-    $('ver').textContent = VERSION;
     let cards;
     try {
       const res = await fetch('data/cards.json?v=' + VERSION);
@@ -1837,7 +1803,6 @@
     if (!getPool(state.deck.poolId)) state.deck.poolId = 'theme:pcr';
     bindEvents();
     requestPersistentStorage();     // 申请持久化，降低数据被自动清理的概率
-    $('poolHint').textContent = `左键加入基础卡组 · 右键移除（同名卡合计最多 ${LIMIT.per} 张，共 ${LIMIT.basicMin}-${LIMIT.basicMax} 张）`;
     renderAll();
     // 刷新后回到上次所在的界面（只有已选定主战者的卡组才允许直接进组卡界面）
     let savedView = 'home';
