@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v52';
+  const VERSION = 'v53';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -295,13 +295,13 @@
     const draft = isDraft(d);
     const n = d ? deckCounts(d) : { total: 0 };
     $('homeDeckInfo').textContent = draft
-      ? `（编辑中：${d.name} · ${poolDisplayName(d.poolId)} · ${n.total}/50`
+      ? `（编辑中：${d.name} · ${poolDisplayName(d.poolId)} · 基础 ${n.basic} · 进化 ${n.evo}`
         + (d.masterSid ? '' : ' · 未选主战者') + '）'
       : '（暂无编辑中的卡组）';
     // 没有内容时禁用「继续组卡」
     const btn = $('btnResume');
     btn.disabled = !draft;
-    btn.title = draft ? `继续编辑「${d.name}」（${n.total}/50）` : '当前没有编辑中的卡组';
+    btn.title = draft ? `继续编辑「${d.name}」（基础 ${n.basic} · 进化 ${n.evo}）` : '当前没有编辑中的卡组';
     // 没有保存过的卡组时禁用「我的卡组」
     const my = $('btnMyDecks');
     my.disabled = saved.length === 0;
@@ -1230,8 +1230,8 @@
     const legal = isLegal(d);
     d.saved = legal;
     saveStore();
-    if (legal) toast(`已保存「${d.name}」（${n.total}/50）`);
-    else if (n.total) toast(`已暂存「${d.name}」（${n.total}/50，未完成）`, 2400);
+    if (legal) toast(`已保存「${d.name}」（基础 ${n.basic} · 进化 ${n.evo}）`);
+    else if (n.total) toast(`已暂存「${d.name}」（基础 ${n.basic} · 进化 ${n.evo}，未完成）`, 2400);
     else toast('卡组为空，已回首页');
   }
 
@@ -1315,7 +1315,7 @@
       const sub = document.createElement('div');
       sub.className = 'md-sub';
       sub.innerHTML = `${poolDisplayName(d.poolId)} · ${mc ? (mc.name || mc.id) : '未选主战者'}`
-        + ` · <b>${n.total}</b>/50（基础 ${n.basic} · 进化 ${n.evo}）`;
+        + ` · 基础 <b>${n.basic}</b> · 进化 <b>${n.evo}</b>`;
       info.append(nm, sub);
       row.appendChild(info);
 
