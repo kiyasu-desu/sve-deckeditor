@@ -92,18 +92,19 @@ main {
 }
 .fab:active { transform: scale(.94); }
 .fab-left { left: 18px; }
-.fab-right { right: 18px; }
+.fab-right { right: 18px; width: 62px; height: 62px; }
 .fab .fab-ico { display: block; transform: translateY(-1px); }
 
-/* 卡组球显示当前张数 */
+/* 卡组球：上下两行显示「基础 / 进化」张数 */
 .fab-right .fab-count {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
   line-height: 1;
 }
-.fab-right .fab-count b { font-size: 17px; font-weight: 700; }
-.fab-right .fab-count em { font-size: 9px; font-style: normal; color: var(--dim); margin-top: 1px; }
+.fab-right .fc-row { display: flex; align-items: baseline; justify-content: center; gap: 2px; }
+.fab-right .fc-row b { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fab-right .fc-row em { font-size: 8px; font-style: normal; color: var(--dim); }
 .fab-right.full { background: var(--accent2); border-color: var(--accent2); color: #08221a; }
-.fab-right.full .fab-count em { color: #08221a; opacity: .7; }
+.fab-right.full .fc-row em { color: #08221a; opacity: .75; }
 .fab.fab-active { background: var(--accent); border-color: var(--accent); color: #06202e; }
 
 /* ---------------- 筛选抽屉（覆盖在卡池之上）---------------- */
@@ -223,9 +224,11 @@ aside, section { min-height: 0; }
 .pv-curvebox { display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
 .pv-total { text-align: right; font-size: 15px; color: var(--dim); }
 .pv-total b { color: var(--fg); font-size: 20px; font-weight: 700; }
+.pv-total span { font-size: 12px; }
 
-.curve-chart { display: flex; align-items: flex-end; gap: 4px; height: 104px; }
-.curve-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0; }
+/* 费用条形图：每根柱子限宽并居中，别被拉得过粗 */
+.curve-chart { display: flex; align-items: flex-end; justify-content: center; gap: 5px; height: 104px; }
+.curve-bar { flex: 0 1 26px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; height: 100%; min-width: 0; }
 .curve-bar .cb-n { font-size: 11px; color: var(--fg); font-weight: 700; flex: none; }
 .curve-bar .cb-track { flex: 1; width: 100%; min-height: 0; display: flex; align-items: flex-end; }
 .curve-bar .cb-fill {

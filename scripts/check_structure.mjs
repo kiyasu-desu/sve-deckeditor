@@ -22,7 +22,7 @@ for (const id of dup) console.log(`      重复: #${id}`);
 
 // 3. 关键元素齐全
 const need = ['grid', 'btnMyDecks',
-  'btnFilterBall', 'btnFiltersClose', 'btnDeckBall', 'fabCount', 'pvClear', 'pvName', 'pvCount', 'pvCls', 'pvCurveChart',
+  'btnFilterBall', 'btnFiltersClose', 'btnDeckBall', 'fabBasic', 'fabEvo', 'pvClear', 'pvName', 'pvCountBasic', 'pvCountEvo', 'pvCls', 'pvCurveChart',
   'pvBasic', 'pvEvo', 'pvSave', 'pvImage', 'pvExport', 'pvClose', 'deckImage',
   'diBody', 'diSaveImg', 'diClose', 'myDecks', 'myList', 'wizard', 'poolList',
   'masterList', 'wizCancel', 'wizOk'];

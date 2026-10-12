@@ -54,24 +54,22 @@ body.is-touch #poolHint { display: none; }
   }
   .pool-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 
-  /* 查看卡组：信息区压缩，把空间尽量留给卡组列表 */
+  /* 查看卡组：信息区同样三栏（主战者 | 卡组构成 | 费用图），整体压缩 */
   .preview-summary {
-    grid-template-columns: auto minmax(0, 1fr);
-    gap: 10px; margin: 6px 0 8px;
+    grid-template-columns: auto minmax(0, .8fr) minmax(0, 1.2fr);
+    gap: 8px; margin: 6px 0 8px;
   }
-  .pv-master img { width: 74px; height: 105px; border-radius: 6px; }
-  .pv-stats { gap: 2px; }
-  .pv-row { font-size: 12px; gap: 6px; }
-  /* 主战者卡图右侧的统计压成两列，省一行高度 */
-  .pv-stats {
-    display: grid; grid-template-columns: 1fr 1fr;
-    align-content: center;
-  }
-  .pv-curvebox { grid-column: 1 / -1; }
-  .pv-total { text-align: left; font-size: 13px; }
-  .pv-total b { font-size: 16px; }
-  .curve-chart { height: 62px; gap: 3px; }
-  .curve-bar .cb-n { font-size: 10px; }
+  .pv-master img { width: 58px; height: 82px; border-radius: 6px; }
+  .pv-stats { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
+  .pv-row { font-size: 11px; gap: 4px; }
+  .pv-curvebox { grid-column: auto; }
+  .pv-total { text-align: left; font-size: 11px; }
+  .pv-total b { font-size: 14px; }
+  .pv-total span { font-size: 10px; }
+  .curve-chart { height: 54px; gap: 2px; }
+  .curve-bar { flex: 0 1 15px; }
+  .curve-bar .cb-n { font-size: 9px; }
+  .curve-bar .cb-x { font-size: 9px; }
 
   /* 卡组行在窄屏下更紧凑 */
   .di { min-height: 54px; padding: 6px 8px; gap: 6px; }

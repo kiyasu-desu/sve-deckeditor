@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v51';
+  const VERSION = 'v52';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -790,14 +790,15 @@
   }
 
   // ------------------------------------------------------------ 渲染：卡组
-  // 右侧卡组栏已取消，这里只更新「卡组名」和右下角悬浮球的张数。
+  // 右侧卡组栏已取消，这里只更新右下角悬浮球的基础/进化张数。
   // 卡组详情统一在「查看卡组」弹窗里呈现（打开时重新渲染）。
   function renderDeck() {
     const d = state.deck;
     renderClsFilter();     // 职业筛选项取决于当前卡池是职业还是主题
 
     const n = deckCounts(d);
-    $('fabCount').textContent = n.total;
+    $('fabBasic').textContent = n.basic;
+    $('fabEvo').textContent = n.evo;
     $('btnDeckBall').classList.toggle('full', isLegal(d));
   }
 
@@ -1031,7 +1032,9 @@
     const mc = d.masterSid ? state.bySid.get(Number(d.masterSid)) : null;
 
     $('pvName').textContent = d.name || '未命名卡组';
-    $('pvCount').textContent = `${n.total}/50`;
+    // 不用「总张数/50」—— 并非所有卡池都以 50 张为准，展示基础/进化各自的数量更有意义
+    $('pvCountBasic').textContent = n.basic;
+    $('pvCountEvo').textContent = n.evo;
 
     // 主战者卡图（信息区左侧）。新布局不再单列主战者名，名字放进悬停提示。
     const mImg = $('pvMasterImg');
