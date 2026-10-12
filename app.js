@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v55';
+  const VERSION = 'v56';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -395,6 +395,135 @@
     if (isDraft(state.deck)) localStorage.setItem(LS_CUR, state.deck.id);
     else localStorage.removeItem(LS_CUR);
     state.hasDraft = isDraft(state.deck);
+  }
+
+  // ------------------------------------------------------------ 备份：导出 / 导入
+  // 卡组只存在浏览器 localStorage 里（按域名隔离），清站点数据或换设备就没了。
+  // 这里提供全量 JSON 备份：导出下载一个文件，导入按「合并」处理（只增不减）。
+  const BACKUP_VERSION = 1;
+
+  /** 申请持久化存储，降低被浏览器自动清理的概率（不支持时静默跳过） */
+  async function requestPersistentStorage() {
+    try {
+      if (!navigator.storage || !navigator.storage.persist) return;
+      if (await navigator.storage.persisted()) return;   // 已经是持久化的
+      const ok = await navigator.storage.persist();
+      console.log(`[SVE ${VERSION}] 持久化存储: ${ok ? '已授予' : '未授予（数据仍可用，但可能被自动清理）'}`);
+    } catch (e) { /* 忽略 */ }
+  }
+
+  /** 卡组内容指纹：用于判断「这是同一副卡组」，避免重复导入造成无限副本 */
+  function deckSig(d) {
+    const flat = (o) => Object.entries(o || {})
+      .map(([k, v]) => [Number(k), v])
+      .sort((a, b) => a[0] - b[0]);
+    return JSON.stringify([d.poolId, Number(d.masterSid) || null, flat(d.basic), flat(d.evo)]);
+  }
+
+  function exportBackup() {
+    const decks = state.decks.filter((d) => d && d.id);
+    if (!decks.length) { toast('还没有可导出的卡组'); return; }
+    const payload = {
+      app: 'sve-deckeditor',
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      count: decks.length,
+      decks,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 1)], { type: 'application/json' });
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      + `-${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `sve-decks-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(`已导出 ${decks.length} 副卡组`);
+  }
+
+  /** 规范化导入的一条卡组：只保留已知字段，防止脏数据写坏 store */
+  function sanitizeDeck(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const numMap = (o) => {
+      const out = {};
+      if (o && typeof o === 'object') {
+        for (const [k, v] of Object.entries(o)) {
+          const sid = Number(k);
+          const n = Math.max(0, Math.min(LIMIT.per, Math.floor(Number(v) || 0)));
+          if (Number.isFinite(sid) && sid > 0 && n > 0) out[sid] = n;
+        }
+      }
+      return out;
+    };
+    const basic = numMap(raw.basic);
+    const evo = numMap(raw.evo);
+    if (!Object.keys(basic).length && !Object.keys(evo).length) return null;  // 空卡组不导
+    return {
+      id: typeof raw.id === 'string' && raw.id ? raw.id : (`d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`),
+      name: String(raw.name || '未命名').slice(0, 20),
+      poolId: getPool(raw.poolId) ? raw.poolId : (state.decks[0] ? state.decks[0].poolId : 'theme:pcr'),
+      masterSid: raw.masterSid ? Number(raw.masterSid) : null,
+      basic,
+      evo,
+      saved: !!raw.saved,
+    };
+  }
+
+  /** 合并导入：同内容跳过，同 id 不同内容另存为副本 */
+  function mergeBackup(list) {
+    const sigs = new Set(state.decks.filter((d) => d && d.id).map(deckSig));
+    const ids = new Set(state.decks.filter((d) => d && d.id).map((d) => d.id));
+    let added = 0; let skipped = 0; let copied = 0;
+    for (const raw of list) {
+      const d = sanitizeDeck(raw);
+      if (!d) { skipped += 1; continue; }
+      const sig = deckSig(d);
+      if (sigs.has(sig)) { skipped += 1; continue; }     // 已有同一副，跳过
+      if (ids.has(d.id)) {                               // id 撞了但内容不同 -> 另存为副本
+        d.id = `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        d.name = `${d.name}（导入）`.slice(0, 20);
+        copied += 1;
+      }
+      state.decks.push(d);
+      sigs.add(sig);
+      ids.add(d.id);
+      added += 1;
+    }
+    if (added) {
+      // 当前没有正在编辑的卡组时，把导入进来的第一副设为当前
+      if (!isDraft(state.deck)) {
+        const first = state.decks.find((d) => d && d.id && isDraft(d));
+        if (first) state.deck = first;
+      }
+      saveStore();
+      renderAll();
+    }
+    return { added, skipped, copied };
+  }
+
+  async function importBackup(file) {
+    let text;
+    try { text = await file.text(); } catch (e) { toast('读取文件失败'); return; }
+    let data;
+    try { data = JSON.parse(text); } catch (e) { toast('不是合法的 JSON 文件'); return; }
+
+    const list = Array.isArray(data) ? data
+      : (data && Array.isArray(data.decks) ? data.decks : null);
+    if (!list) { toast('备份格式不对（缺少 decks 数组）'); return; }
+    if (!list.length) { toast('备份里没有卡组'); return; }
+
+    const r = mergeBackup(list);
+    if (r.added) {
+      toast(`导入完成：新增 ${r.added} 副`
+        + (r.copied ? `（${r.copied} 副重名已另存为副本）` : '')
+        + (r.skipped ? `，跳过 ${r.skipped} 副已有/无效` : ''), 3600);
+    } else {
+      toast(`没有新增：${r.skipped} 副都已存在或无效`, 3000);
+    }
+    renderMyDecks();
   }
 
   // ------------------------------------------------------------ 卡牌归类
@@ -1599,6 +1728,15 @@
     $('myClose2').onclick = closeMyDecks;
     $('myDecks').addEventListener('click', (e) => { if (e.target.id === 'myDecks') closeMyDecks(); });
 
+    // 备份：导出下载 JSON / 导入按「合并」处理
+    $('myExport').onclick = exportBackup;
+    $('myImport').onclick = () => $('myFile').click();
+    $('myFile').onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = '';                 // 允许连续导入同一个文件
+      if (f) await importBackup(f);
+    };
+
     // 查看卡组弹窗（入口是右下角悬浮球）
     $('pvClose').onclick = closePreview;
     // 清空卡组：清掉后立刻关闭窗口，回到卡池
@@ -1698,6 +1836,7 @@
     loadStore();
     if (!getPool(state.deck.poolId)) state.deck.poolId = 'theme:pcr';
     bindEvents();
+    requestPersistentStorage();     // 申请持久化，降低数据被自动清理的概率
     $('poolHint').textContent = `左键加入基础卡组 · 右键移除（同名卡合计最多 ${LIMIT.per} 张，共 ${LIMIT.basicMin}-${LIMIT.basicMax} 张）`;
     renderAll();
     // 刷新后回到上次所在的界面（只有已选定主战者的卡组才允许直接进组卡界面）

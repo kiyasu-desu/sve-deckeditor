@@ -321,6 +321,8 @@ aside, section { min-height: 0; }
   flex: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px;
 }
 .pf-right { display: flex; gap: 8px; }
+.pf-left { display: flex; gap: 8px; }
+.pf-left button, .pf-right button { padding: 6px 12px; }
 /* 清空卡组：危险操作，用红色区分 */
 .danger {
   background: transparent; border-color: #7a2c2c; color: #e0736f;

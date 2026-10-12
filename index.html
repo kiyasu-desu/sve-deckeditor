@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SVE 组卡">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=55">
-<link rel="stylesheet" href="style-mobile.css?v=55">
+<link rel="stylesheet" href="style.css?v=56">
+<link rel="stylesheet" href="style-mobile.css?v=56">
 </head>
 <body>
 
@@ -222,7 +222,13 @@
     </div>
     <div id="myList" class="mysaved-list"></div>
     <div class="preview-foot">
+      <div class="pf-left">
+        <button id="myExport" title="把全部卡组导出为 JSON 文件备份">导出备份</button>
+        <button id="myImport" title="从 JSON 备份文件导入（合并，不覆盖）">导入备份</button>
+      </div>
       <button id="myClose2">关闭</button>
+    </div>
+    <input type="file" id="myFile" accept=".json,application/json" hidden>
     </div>
   </div>
 </div>
@@ -239,6 +245,6 @@
 <div id="tip" class="tip hidden"></div>
 
 <script src="lib/crypto-js.js"></script>
-<script src="app.js?v=55"></script>
+<script src="app.js?v=56"></script>
 </body>
 </html>

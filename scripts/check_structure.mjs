@@ -24,7 +24,7 @@ for (const id of dup) console.log(`      重复: #${id}`);
 const need = ['grid', 'btnMyDecks',
   'btnFilterBall', 'btnFiltersClose', 'btnDeckBall', 'fabBasic', 'fabEvo', 'pvClear', 'pvName', 'pvCountBasic', 'pvCountEvo', 'pvCls', 'pvCurveChart',
   'pvBasic', 'pvEvo', 'pvSave', 'pvImage', 'pvExport', 'pvClose', 'deckImage',
-  'diBody', 'diSaveImg', 'diClose', 'myDecks', 'myList', 'wizard', 'poolList',
+  'diBody', 'diSaveImg', 'diClose', 'myDecks', 'myList', 'myExport', 'myImport', 'myFile', 'wizard', 'poolList',
   'masterList', 'wizCancel', 'wizOk'];
 const miss2 = need.filter((id) => !html.includes(`id="${id}"`));
 say(miss2.length === 0, '必需元素齐全');
