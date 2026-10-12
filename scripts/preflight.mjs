@@ -47,7 +47,7 @@ const cards = JSON.parse(fs.readFileSync('data/cards.json', 'utf8'));
 say(cards.length === 6053, `卡表 ${cards.length} 张（应为 6053）`);
 say(cards.every((c) => c.sid), '所有卡都有 shortId');
 const withImg = cards.filter((c) => c.md5);
-say(withImg.length === 6047, `有卡图 ${withImg.length} 张（应为 6047）`);
+say(withImg.length === 6053, `有卡图 ${withImg.length} 张（应为 6053，即全部）`);
 const withSkill = cards.filter((c) => c.skillText && c.skillText.length > 1);
 say(withSkill.length === 5823, `有效果文本 ${withSkill.length} 张（应为 5823）`);
 
