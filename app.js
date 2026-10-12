@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 口袋影之诗 · 卡组编辑器  v3
  *
  * 卡组码算法还原自 app（bundle 内 decryGroupCode / generateGroupCode）：
@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v57';
+  const VERSION = 'v58';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -289,8 +289,9 @@
     if (name === 'home') updateHome();
   }
   function updateHome() {
-    const saved = state.decks.filter((d) => d.saved && isDraft(d));
-    $('homeDeckCount').textContent = saved.length;
+    // 计数与「我的卡组」列表保持一致：所有有内容的卡组
+    const mine = state.decks.filter((d) => d && d.id && isDraft(d));
+    $('homeDeckCount').textContent = mine.length;
     const d = state.deck;
     const draft = isDraft(d);
     const n = d ? deckCounts(d) : { total: 0 };
@@ -304,8 +305,8 @@
     btn.title = draft ? `继续编辑「${d.name}」（基础 ${n.basic} · 进化 ${n.evo}）` : '当前没有编辑中的卡组';
     // 没有保存过的卡组时禁用「我的卡组」
     const my = $('btnMyDecks');
-    my.disabled = saved.length === 0;
-    my.title = saved.length ? `查看已保存的 ${saved.length} 副卡组` : '还没有保存过卡组';
+    my.disabled = mine.length === 0;
+    my.title = mine.length ? `查看我的 ${mine.length} 副卡组` : '还没有保存过卡组';
   }
   // 诊断信息已移除（原先在页面角落显示版本/图片计数/元素尺寸）
   function updateDiag() { /* no-op：保留调用点以降低改动风险 */ }
@@ -1345,7 +1346,10 @@
 
   // 新建卡组：丢弃旧草稿（编辑中的卡组只保留一份），并走向导选卡池+主战者
   function startNewDeck() {
-    const keep = state.decks.filter((d) => d.id !== state.deck.id && isDraft(d));
+    // 只丢弃「空壳」（0 张卡）。
+    // 有内容的卡组一律保留 —— 包括当前正在编辑的那副：它可能是刚从「我的卡组」
+    // 载入的正式卡组，也可能是还没完成的草稿，两者都不该被新建动作删掉。
+    const keep = state.decks.filter((d) => d && d.id && isDraft(d));
     const fresh = newDeck(null);
     state.decks = keep.concat(fresh);
     state.deck = fresh;
@@ -1390,9 +1394,11 @@
   }
 
   // ------------------------------------------------------------ 我的卡组
-  // 只列「正式保存过」的卡组（即已达组卡要求）；暂存的半成品留在首页「继续组卡」
+  // 列出所有「有内容」的卡组：正式保存的和未完成的草稿都在这里，
+  // 保证不会有卡组因为「不是当前编辑的那副」而变得无处可寻。
+  // 列表里用「可导出 / 未完成」徽标区分状态。
   function renderMyDecks() {
-    const list = state.decks.filter((d) => d.saved && isDraft(d)).slice().reverse();
+    const list = state.decks.filter((d) => d && d.id && isDraft(d)).slice().reverse();
     const box = $('myList');
     if (!list.length) {
       box.innerHTML = '<div class="mysaved-empty">还没有保存过卡组，点「开始组卡」新建一副吧</div>';
@@ -1675,7 +1681,7 @@
         modal('新建卡组',
           `当前「${d.name}」放了 ${n.total} 张卡，还未达到组卡要求`
           + `（基础 ${LIMIT.basicMin}-${LIMIT.basicMax} 张、进化 ${LIMIT.evoMin}-${LIMIT.evoMax} 张）。`
-          + '新建会丢弃这份未完成的卡组。', '', 'plain');
+          + '新建后会把它留在「我的卡组」里，不会丢失。', '', 'plain');
         $('modalOk').dataset.mode = 'newdeck';
         return;
       }
@@ -1731,6 +1737,12 @@
     // 只能通过「返回」离开，且返回后回到 index。
     $('wizCancel').onclick = () => {
       closeWizard();
+      // 取消新建时，当前这个空壳卡组没有意义；若还有别的卡组，切回最近一副有内容的，
+      // 这样首页的「继续组卡」不会因为刚点过「开始组卡」而无故变灰。
+      if (!isDraft(state.deck)) {
+        const back = state.decks.filter((d) => d && d.id && d.id !== state.deck.id && isDraft(d)).pop();
+        if (back) { state.deck = back; saveStore(); }
+      }
       showView('home');
     };
     $('wizOk').onclick = commitWizard;
