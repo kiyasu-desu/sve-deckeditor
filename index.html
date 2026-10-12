@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="SVE 组卡">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=53">
-<link rel="stylesheet" href="style-mobile.css?v=53">
+<link rel="stylesheet" href="style.css?v=54">
+<link rel="stylesheet" href="style-mobile.css?v=54">
 </head>
 <body>
 
@@ -111,11 +111,8 @@
   </aside>
 
   <!-- ============ 右下角：卡组悬浮球 ============ -->
-  <button id="btnDeckBall" class="fab fab-right" title="查看卡组" aria-label="查看卡组">
-    <span class="fab-count">
-      <span class="fc-row"><b id="fabBasic">0</b><em>基础</em></span>
-      <span class="fc-row"><b id="fabEvo">0</b><em>进化</em></span>
-    </span>
+  <button id="btnDeckBall" class="fab fab-right" title="查看卡组（基础/进化）" aria-label="查看卡组">
+    <span class="fab-count"><b id="fabBasic">0</b><em>/</em><b id="fabEvo">0</b></span>
   </button>
 </div>
 
@@ -242,6 +239,6 @@
 <div id="tip" class="tip hidden"></div>
 
 <script src="lib/crypto-js.js"></script>
-<script src="app.js?v=53"></script>
+<script src="app.js?v=54"></script>
 </body>
 </html>

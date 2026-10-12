@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v53';
+  const VERSION = 'v54';
 
   // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
   const THEME_POOLS = [
@@ -470,10 +470,18 @@
     });
   }
 
-  function makeNoImg(text) {
+  // 卡图缺失时的占位：显示卡名 + 一行小字说明，比只显示卡号有用
+  function makeNoImg(text, sub) {
     const d = document.createElement('div');
     d.className = 'noimg';
-    d.textContent = text;
+    const n = document.createElement('span');
+    n.className = 'ni-name';
+    n.textContent = text;
+    d.appendChild(n);
+    const s = document.createElement('span');
+    s.className = 'ni-sub';
+    s.textContent = sub || '暂无卡图';
+    d.appendChild(s);
     return d;
   }
 
@@ -707,11 +715,12 @@
         img.addEventListener('load', () => { state.imgOk += 1; updateDiag(); });
         attachCardImage(img, c.md5, c.imgExt, () => {
           state.imgFail += 1; updateDiag();
-          img.replaceWith(makeNoImg(c.name || c.id));
+          img.replaceWith(makeNoImg(c.name || c.id, '卡图加载失败'));
         });
         el.appendChild(img);
       } else {
-        el.appendChild(makeNoImg(c.id));
+        // 卡表里没有这张卡的图片资源（当前版本客户端未包含）
+        el.appendChild(makeNoImg(c.name || c.id, '暂无卡图'));
       }
 
       const cost = document.createElement('div');

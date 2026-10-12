@@ -95,16 +95,15 @@ main {
 .fab-right { right: 18px; width: 62px; height: 62px; }
 .fab .fab-ico { display: block; transform: translateY(-1px); }
 
-/* 卡组球：上下两行显示「基础 / 进化」张数 */
+/* 卡组球：基础/进化 张数，形如 40/10 */
 .fab-right .fab-count {
-  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 1px;
   line-height: 1;
 }
-.fab-right .fc-row { display: flex; align-items: baseline; justify-content: center; gap: 2px; }
-.fab-right .fc-row b { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.fab-right .fc-row em { font-size: 8px; font-style: normal; color: var(--dim); }
+.fab-right .fab-count b { font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.fab-right .fab-count em { font-size: 14px; font-style: normal; color: var(--dim); opacity: .8; }
 .fab-right.full { background: var(--accent2); border-color: var(--accent2); color: #08221a; }
-.fab-right.full .fc-row em { color: #08221a; opacity: .75; }
+.fab-right.full .fab-count em { color: #08221a; opacity: .6; }
 .fab.fab-active { background: var(--accent); border-color: var(--accent); color: #06202e; }
 
 /* ---------------- 筛选抽屉（覆盖在卡池之上）---------------- */
@@ -418,8 +417,15 @@ aside, section { min-height: 0; }
   display: block; background: #0e1015; border-radius: 7px 7px 0 0;
 }
 .card .noimg {
-  width: 100%; aspect-ratio: 63/88; display: flex; align-items: center; justify-content: center;
-  color: #556; font-size: 11px; text-align: center; padding: 6px; background: #0e1015; word-break: break-all;
+  width: 100%; aspect-ratio: 63/88; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 6px;
+  color: #6b7480; font-size: 11px; text-align: center; padding: 8px;
+  background: #0e1015; word-break: break-word; line-height: 1.35;
+}
+.card .noimg .ni-name { font-size: 12px; color: #98a2b0; }
+.card .noimg .ni-sub {
+  font-size: 10px; color: #4d545e; border: 1px dashed #2b313a;
+  border-radius: 4px; padding: 1px 6px;
 }
 .card .meta { padding: 4px 6px; }
 .card .nm { font-size: 11px; line-height: 1.25; height: 28px; overflow: hidden; }
