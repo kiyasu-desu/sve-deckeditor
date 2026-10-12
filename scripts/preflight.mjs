@@ -1,4 +1,4 @@
-﻿/** 发布前总检：语法、结构、凭据、子路径、数据完整性一次跑完。 */
+/** 发布前总检：语法、结构、凭据、子路径、数据完整性一次跑完。 */
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
@@ -93,7 +93,11 @@ say(iconOk === 9, `9 张职业图标全部可完整渲染（${iconOk}/9）`);
 section('卡组码');
 say(fs.existsSync('lib/crypto-js.js'), 'crypto-js 已随仓库发布');
 say(app.includes('encryptDeckCode') || app.includes('CryptoJS.AES.encrypt'), 'app.js 含加密实现');
-say(!/«REDACTED-TABLEKEY»/.test(app), 'app.js 不含配表解密密钥');
+// 配表解密密钥的具体值不写在这里（那本身就是泄露）。
+// 按确切值检查请用 scan_secrets.mjs（它从仓库外的本地文件读具体值）。
+// 这里只做一个粗检查：仓库里不应出现「配表解密」相关的工具脚本。
+say(!fs.existsSync('scripts/decrypt_tables.mjs') && !fs.existsSync('scripts/rebuild_from_tables.mjs'),
+  '不含配表解密工具');
 
 // ---------- 6. 移动端 ----------
 section('移动端');
