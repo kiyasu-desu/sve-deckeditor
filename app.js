@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 口袋影之诗 · 卡组编辑器  v3
  *
  * 卡组码算法还原自 app（bundle 内 decryGroupCode / generateGroupCode）：
@@ -14,14 +14,32 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v58';
+  const VERSION = 'v59';
 
-  // 联动主题 -> 卡盒（已用真实卡组码/card_name 验证）
+  // 联动主题 -> 卡盒
+  // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
+  //       只看盒号是不够的 —— PR 卡的 box 是 'PR'，但 PR-430SC 其实是 CP04 的复刻
+  //       （官方配表的 card_id_jpn 指向 CP04-048SC）；灰姑娘女孩还有 CSD02a/b/c 三个基本牌组盒。
+  //       boxes 字段保留作说明与兜底，判定优先走 card.theme。
   const THEME_POOLS = [
     { id: 'uma', name: '赛马娘', boxes: ['CP01', 'CSD01', 'ECP01'] },
-    { id: 'imas', name: '灰姑娘女孩', boxes: ['CP02'] },
+    { id: 'imas', name: '灰姑娘女孩', boxes: ['CP02', 'CSD02a', 'CSD02b', 'CSD02c'] },
     { id: 'pcr', name: '公主连结', boxes: ['CP04'] },
   ];
+  /** 卡是否属于某主题：优先用预计算的 theme，缺失时退回按盒号 */
+  function cardInTheme(card, themeId) {
+    if (!card) return false;
+    if (card.theme) return card.theme === themeId;
+    const t = THEME_POOLS.find((x) => x.id === themeId);
+    return !!t && t.boxes.includes(card.box);
+  }
+  /** 反查卡所属主题 id（没有则 null） */
+  function themeIdOf(card) {
+    if (!card) return null;
+    if (card.theme) return card.theme;
+    const t = THEME_POOLS.find((x) => x.boxes.includes(card.box));
+    return t ? t.id : null;
+  }
 
   // 职业 / 主题图标：取自官方包 Resources.assets.game.button.classButtonNN{On,Off}Png
   //   00 中立 · 01 精灵 · 02 皇家护卫 · 03 巫师 · 04 龙族 · 05 梦魇 · 06 主教
@@ -235,7 +253,7 @@
     };
     const pools = [];
     for (const t of THEME_POOLS) {
-      const cards = state.all.filter((c) => t.boxes.includes(c.box));
+      const cards = state.all.filter((c) => cardInTheme(c, t.id));
       pools.push(Object.assign({
         id: 'theme:' + t.id, kind: 'theme', name: t.name,
         sub: t.boxes.join(' / '), cards,
@@ -257,7 +275,7 @@
   function poolMatch(poolId, card) {
     const p = getPool(poolId);
     if (!p) return true;
-    if (p.kind === 'theme') return THEME_POOLS.find((t) => 'theme:' + t.id === poolId).boxes.includes(card.box);
+    if (p.kind === 'theme') return cardInTheme(card, poolId.slice('theme:'.length));
     const cl = poolId.slice(4);
     return card.cls === cl || card.cls === '中立';
   }
@@ -1374,8 +1392,8 @@
     const theme = THEME_POOLS.find((t) => t.name === obj['1']);
     if (theme) poolId = 'theme:' + theme.id;
     else if (mc) {
-      const byTheme = THEME_POOLS.find((t) => t.boxes.includes(mc.box));
-      if (byTheme) poolId = 'theme:' + byTheme.id;
+      const tid = themeIdOf(mc);
+      if (tid) poolId = 'theme:' + tid;
       else if (mc.cls && state.cls.includes(mc.cls)) poolId = 'cls:' + mc.cls;
     }
 
