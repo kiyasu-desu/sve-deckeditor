@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v60';
+  const VERSION = 'v61';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -61,7 +61,8 @@
   // 解码结果写入 Cache API，二次访问直接命中，不再走网络。
   // 若 CDN 连续失败，自动回退到同源 /img/ 代理（本地开发或自建服务器时可用）。
   const CDN_BASE = 'https://betasystem.gsf.netease.com/';
-  const IMG_CACHE_NAME = 'sve-img-v1';
+  // v2：加入右下角噪点修复，缓存键跟着变，避免沿用旧的无修复图
+  const IMG_CACHE_NAME = 'sve-img-v2';
   const IMG_CONCURRENCY = 6;
 
   let imgCacheStore = null;       // Cache API 句柄（不可用时为 null）
@@ -97,6 +98,61 @@
       else if (bytes[0] === 0x89 && bytes[1] === 0x50) mime = 'image/png';
       return { bytes, mime };
     } catch (e) { return null; }
+  }
+
+  // ============================================================ 右下角噪点修复
+  // 官方资源本身是被截断的 JPEG/PNG（扫描数据末尾缺一小段），解码器只能解到截断点，
+  // 最后一个 MCU 填出来的就是垃圾像素 —— 表现为卡片右下角的彩色噪点。
+  //
+  // 修法：卡片右上角的圆角是干净的，且与右下角形状对称；
+  //       把右上角那块垂直翻转后贴到右下角（上边缘做羽化），既能盖掉噪点，
+  //       又能把被破坏的圆角还原出来。实测 64x36 的框对 744x1039 的图效果最好。
+  const CORNER_FIX = { enabled: true, wRatio: 0.086, hRatio: 0.035, feather: 8 };
+
+  async function repairCardCorner(blob) {
+    if (!CORNER_FIX.enabled) return blob;
+    if (typeof createImageBitmap !== 'function' || typeof OffscreenCanvas !== 'function') return blob;
+    let bmp;
+    try { bmp = await createImageBitmap(blob); } catch (e) { return blob; }
+    const w = bmp.width;
+    const h = bmp.height;
+    if (!w || !h || w < 200 || h < 200) { if (bmp.close) bmp.close(); return blob; }
+    const cw = Math.max(32, Math.round(w * CORNER_FIX.wRatio));
+    const ch = Math.max(18, Math.round(h * CORNER_FIX.hRatio));
+    if (cw * 2 >= w || ch * 2 >= h) { if (bmp.close) bmp.close(); return blob; }
+    try {
+      const cv = new OffscreenCanvas(w, h);
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(bmp, 0, 0);
+      if (bmp.close) bmp.close();
+
+      // 取右上角一块，垂直翻转
+      const src = ctx.getImageData(w - cw, 0, cw, ch);
+      const dst = ctx.getImageData(w - cw, h - ch, cw, ch);
+      const s = src.data;
+      const d = dst.data;
+      const feather = Math.min(CORNER_FIX.feather, ch);
+      for (let y = 0; y < ch; y += 1) {
+        // 源行：翻转后第 y 行对应原来的第 (ch-1-y) 行
+        const sy = ch - 1 - y;
+        // 羽化：最上面 feather 行按比例与目标混合
+        const a = y < feather ? y / feather : 1;
+        for (let x = 0; x < cw; x += 1) {
+          const si = (sy * cw + x) * 4;
+          const di = (y * cw + x) * 4;
+          d[di] = s[si] * a + d[di] * (1 - a);
+          d[di + 1] = s[si + 1] * a + d[di + 1] * (1 - a);
+          d[di + 2] = s[si + 2] * a + d[di + 2] * (1 - a);
+          d[di + 3] = 255;
+        }
+      }
+      ctx.putImageData(dst, w - cw, h - ch);
+      // 卡图不透明，统一转 JPEG（体积小很多）
+      const out = await cv.convertToBlob({ type: 'image/jpeg', quality: 0.92 });
+      return out && out.size ? out : blob;
+    } catch (e) {
+      return blob;   // 任何异常都退回原图，不能因为修复失败而不显示卡图
+    }
   }
 
   // 简单的并发闸门，避免 200 张卡同时发请求把连接打满
@@ -157,9 +213,11 @@
           mime = dec.mime;
         }
         if (!useProxy) imgCdnFails = 0;
-        const blob = new Blob([bytes], { type: mime });
+        let blob = new Blob([bytes], { type: mime });
+        // 修掉右下角的解码噪点（资源本身被截断导致），失败会原样返回
+        blob = await repairCardCorner(blob);
         if (cache) {
-          cache.put(cacheKey, new Response(blob, { headers: { 'content-type': mime } })).catch(() => {});
+          cache.put(cacheKey, new Response(blob, { headers: { 'content-type': blob.type || mime } })).catch(() => {});
         }
         return URL.createObjectURL(blob);
       } catch (e) {
