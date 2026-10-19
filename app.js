@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 口袋影之诗 · 卡组编辑器  v3
  *
  * 卡组码算法还原自 app（bundle 内 decryGroupCode / generateGroupCode）：
@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v62';
+  const VERSION = 'v63';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -62,7 +62,7 @@
   // 若 CDN 连续失败，自动回退到同源 /img/ 代理（本地开发或自建服务器时可用）。
   const CDN_BASE = 'https://betasystem.gsf.netease.com/';
   // v2：加入右下角噪点修复，缓存键跟着变，避免沿用旧的无修复图
-  const IMG_CACHE_NAME = 'sve-img-v3';
+  const IMG_CACHE_NAME = 'sve-img-v4';
   const IMG_CONCURRENCY = 6;
 
   let imgCacheStore = null;       // Cache API 句柄（不可用时为 null）
@@ -110,7 +110,8 @@
   //
   // 注意：这里**不能用 createImageBitmap** —— 它对截断的 JPEG 会直接 reject，
   //       而 <img> 走的是容错解码路径（能显示），所以必须用 <img> 再 drawImage。
-  const CORNER_FIX = { enabled: true, wRatio: 0.086, hRatio: 0.035, feather: 8 };
+  // 修补时按饱和度门控：只换彩色噪点，灰白色的版权文字原样保留（否则文字会被盖掉）。
+  const CORNER_FIX = { enabled: true, wRatio: 0.086, hRatio: 0.035 };
   // 诊断计数：控制台输入 __sveCornerFix 可查看修复成功/失败次数
   const cornerStat = { fixed: 0, failed: 0 };
   try { window.__sveCornerFix = cornerStat; } catch (e) { /* ignore */ }
@@ -158,23 +159,31 @@
       ctx.drawImage(img, 0, 0);
 
       // 取右上角一块，垂直翻转后贴到右下角
+      // 关键：**按饱和度门控** —— 只替换彩色噪点，灰白色的版权文字原样保留。
+      //       否则整块盲盖会把 "Published by NetEase Games" 盖掉。
       const src = ctx.getImageData(w - cw, 0, cw, ch);
       const dst = ctx.getImageData(w - cw, h - ch, cw, ch);
       const s = src.data;
       const d = dst.data;
-      const feather = Math.min(CORNER_FIX.feather, ch);
+      const SAT_LO = 30;      // 低于此饱和度一律当作文本/边框，保留
+      const SAT_HI = 55;      // 高于此饱和度全量替换
+      let replaced = 0;
       for (let y = 0; y < ch; y += 1) {
-        const sy = ch - 1 - y;                       // 翻转
-        const a = y < feather ? y / feather : 1;     // 上边缘羽化
+        const sy = ch - 1 - y;                       // 垂直翻转
         for (let x = 0; x < cw; x += 1) {
-          const si = (sy * cw + x) * 4;
           const di = (y * cw + x) * 4;
-          d[di] = s[si] * a + d[di] * (1 - a);
-          d[di + 1] = s[si + 1] * a + d[di + 1] * (1 - a);
-          d[di + 2] = s[si + 2] * a + d[di + 2] * (1 - a);
-          d[di + 3] = 255;
+          const r = d[di]; const g = d[di + 1]; const b = d[di + 2];
+          const sat = Math.max(r, g, b) - Math.min(r, g, b);
+          if (sat <= SAT_LO) continue;               // 灰白 → 保留（文字、边框）
+          const a = sat >= SAT_HI ? 1 : (sat - SAT_LO) / (SAT_HI - SAT_LO);
+          const si = (sy * cw + x) * 4;
+          d[di] = s[si] * a + r * (1 - a);
+          d[di + 1] = s[si + 1] * a + g * (1 - a);
+          d[di + 2] = s[si + 2] * a + b * (1 - a);
+          replaced += 1;
         }
       }
+      if (!replaced) return { blob, fixed: false };  // 这张图没有噪点，不用改
       ctx.putImageData(dst, w - cw, h - ch);
 
       // 卡图不透明，统一转 JPEG（体积比原 PNG 小很多）
