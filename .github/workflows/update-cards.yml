@@ -1,0 +1,59 @@
+name: Update card pool
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: card-pool-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Generate and validate candidate pool
+        id: pool
+        env:
+          SVE_TABLE_KEY: ${{ secrets.SVE_TABLE_KEY }}
+        run: node scripts/update-cards.mjs --apply
+      - name: Run updater tests
+        if: steps.pool.outputs.changed == 'true'
+        run: node --test tests/*.test.mjs
+      - name: Run existing regression tests
+        if: steps.pool.outputs.changed == 'true'
+        run: |
+          for test in tests/regression/*.mjs; do node "$test"; done
+      - name: Check release and deck codes
+        if: steps.pool.outputs.changed == 'true'
+        run: |
+          node scripts/preflight.mjs
+          node scripts/test_subpath.mjs
+          node scripts/deckcode.mjs selftest
+          node scripts/scan_secrets.mjs
+      - name: Commit data and explicitly request deployment
+        if: steps.pool.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add data/cards.json data/pool-version.json
+          git commit -m 'data: update official card pool'
+          # Refuse to overwrite any concurrent change to main.
+          git push origin HEAD:main
+          # GITHUB_TOKEN pushes do not trigger push workflows.
+          gh workflow run pages.yml --ref main
+      - name: Report a stopped update
+        if: failure()
+        run: echo '卡池更新未完成。检查失败时不会提交候选数据；如提交已成功而部署请求失败，可手动运行 Sync to gh-pages。' >> "$GITHUB_STEP_SUMMARY"

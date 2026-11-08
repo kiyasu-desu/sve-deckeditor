@@ -1,6 +1,7 @@
 /** 发布前总检：语法、结构、凭据、子路径、数据完整性一次跑完。 */
 import fs from 'node:fs';
 import zlib from 'node:zlib';
+import { validateCards, sha256 } from './card-pool.mjs';
 
 let fail = 0;
 const say = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) fail += 1; };
@@ -44,12 +45,24 @@ say(!/(href|src)="\//.test(html), 'HTML 无根绝对路径');
 // ---------- 3. 数据 ----------
 section('数据');
 const cards = JSON.parse(fs.readFileSync('data/cards.json', 'utf8'));
-say(cards.length === 6053, `卡表 ${cards.length} 张（应为 6053）`);
-say(cards.every((c) => c.sid), '所有卡都有 shortId');
+try {
+  validateCards(cards);
+  say(true, `卡表 ${cards.length} 张：卡号/shortId 唯一，必要字段与图片映射完整`);
+} catch (error) { say(false, error.message); }
 const withImg = cards.filter((c) => c.md5);
-say(withImg.length === 6053, `有卡图 ${withImg.length} 张（应为 6053，即全部）`);
+say(withImg.length === cards.length, `有卡图 ${withImg.length} 张（应覆盖全部卡牌）`);
 const withSkill = cards.filter((c) => c.skillText && c.skillText.length > 1);
-say(withSkill.length === 5823, `有效果文本 ${withSkill.length} 张（应为 5823）`);
+say(withSkill.length > 0, `有效果文本 ${withSkill.length} 张`);
+try {
+  const metadata = JSON.parse(fs.readFileSync('data/pool-version.json', 'utf8'));
+  say(metadata.schemaVersion === 1 && metadata.count === cards.length
+    && metadata.skillTextCount === withSkill.length, '卡池元数据数量与卡表一致');
+  say(metadata.dataVersion === sha256(fs.readFileSync('data/cards.json')), '卡池内容摘要与卡表一致');
+  const boxes = {};
+  for (const c of cards) boxes[c.box] = (boxes[c.box] || 0) + 1;
+  say(JSON.stringify(metadata.boxes) === JSON.stringify(boxes), '卡盒统计与卡表一致');
+  say(!!metadata.latestBox?.id && boxes[metadata.latestBox.id] > 0, '最新卡盒存在于卡表');
+} catch (error) { say(false, `卡池元数据不可用：${error.message}`); }
 
 // 不再依赖 thumbs.json
 say(!app.includes('thumbs.json'), '已不依赖 thumbs.json');
@@ -95,9 +108,9 @@ say(fs.existsSync('lib/crypto-js.js'), 'crypto-js 已随仓库发布');
 say(app.includes('encryptDeckCode') || app.includes('CryptoJS.AES.encrypt'), 'app.js 含加密实现');
 // 配表解密密钥的具体值不写在这里（那本身就是泄露）。
 // 按确切值检查请用 scan_secrets.mjs（它从仓库外的本地文件读具体值）。
-// 这里只做一个粗检查：仓库里不应出现「配表解密」相关的工具脚本。
+// 历史含硬编码密钥的工具不得发布；新更新器只从环境变量读取配表密钥。
 say(!fs.existsSync('scripts/decrypt_tables.mjs') && !fs.existsSync('scripts/rebuild_from_tables.mjs'),
-  '不含配表解密工具');
+  '不含历史配表解密工具');
 
 // ---------- 6. 移动端 ----------
 section('移动端');
@@ -112,7 +125,7 @@ say(app.includes('restoreQtyCard'), '含重绘后恢复浮层');
 section('体积');
 const walk = (d, acc = []) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-    if (e.name === '.git') continue;
+    if (e.name === '.git' || e.name === '.imgcache') continue;
     const p = `${d}/${e.name}`;
     if (e.isDirectory()) walk(p, acc); else acc.push(p);
   }
@@ -120,7 +133,7 @@ const walk = (d, acc = []) => {
 };
 const files = walk('.');
 const bytes = files.reduce((s, f) => s + fs.statSync(f).size, 0);
-say(bytes < 5 * 1024 * 1024, `仓库 ${(bytes / 1024 / 1024).toFixed(2)} MB（目标 <5MB）`);
+say(bytes < 20 * 1024 * 1024, `仓库 ${(bytes / 1024 / 1024).toFixed(2)} MB（增长上限 20MB，不含本地图像缓存）`);
 const big = files.filter((f) => fs.statSync(f).size > 100 * 1024 * 1024);
 say(big.length === 0, '无超过 GitHub 100MB 单文件限制的文件');
 say(fs.existsSync('.nojekyll'), '.nojekyll 已就位（Pages 跳过 Jekyll）');
