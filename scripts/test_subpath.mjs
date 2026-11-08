@@ -59,7 +59,7 @@ for (const r of refs) {
 
 // 3. 关键数据文件
 console.log('\n关键数据：');
-for (const p of ['data/cards.json', 'lib/crypto-js.js', 'icons/classButton01.on.png', 'style-mobile.css']) {
+for (const p of ['data/cards.json', 'data/pool-version.json', 'lib/crypto-js.js', 'icons/classButton01.on.png', 'style-mobile.css']) {
   const res = await fetch(BASE + p);
   check(res.ok, `${p}  -> ${res.status}  ${((await res.arrayBuffer()).byteLength / 1024).toFixed(0)}KB`);
 }

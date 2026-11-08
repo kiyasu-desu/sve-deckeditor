@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v63';
+  const VERSION = 'v64';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -1918,18 +1918,53 @@
     renderDeck();
   }
 
+  // Metadata is fetched afresh so a data-only release does not need a JavaScript version bump.
+  // Retry the pair if an edge cache briefly serves files from different deployments.
+  async function loadCardPool() {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let metadata = null;
+      try {
+        const response = await fetch('data/pool-version.json', { cache: 'no-store' });
+        if (response.ok) {
+          const candidate = await response.json();
+          if (candidate.schemaVersion === 1 && /^[a-f0-9]{64}$/.test(candidate.dataVersion)
+            && Number.isSafeInteger(candidate.count) && candidate.count > 0) metadata = candidate;
+        }
+      } catch (e) { /* Older deployments can still load without metadata. */ }
+      const response = await fetch('data/cards.json?v=' + (metadata ? metadata.dataVersion : VERSION), { cache: 'no-cache' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      // Use the original bytes for the integrity check, before parsing or reformatting JSON.
+      const bytes = await response.arrayBuffer();
+      const cards = JSON.parse(new TextDecoder().decode(bytes));
+      if (!Array.isArray(cards) || !cards.length) throw new Error('卡表格式错误');
+      let matched = !metadata || cards.length === metadata.count;
+      if (metadata && typeof crypto !== 'undefined' && crypto.subtle) {
+        const digest = await crypto.subtle.digest('SHA-256', bytes);
+        const hash = Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, '0')).join('');
+        matched = matched && hash === metadata.dataVersion;
+      }
+      if (matched) return { cards, metadata };
+      if (attempt === 1) throw new Error('卡表版本不一致，请稍后刷新');
+    }
+  }
+
   async function boot() {
-    let cards;
+    let cards, metadata;
     try {
-      const res = await fetch('data/cards.json?v=' + VERSION);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      cards = await res.json();
+      ({ cards, metadata } = await loadCardPool());
     } catch (e) {
       document.body.innerHTML = `<pre style="color:#ff6b6b;padding:20px;white-space:pre-wrap">数据加载失败：${e.message}
 
 请通过 HTTP 打开本页（不要直接双击 index.html）：
   http://127.0.0.1:8099/</pre>`;
       return;
+    }
+    const poolStatus = $('cardPoolStatus');
+    if (poolStatus) {
+      const date = metadata && /^\d{4}-\d{2}-\d{2}/.exec(metadata.updatedAt || '');
+      poolStatus.textContent = metadata && metadata.latestBox
+        ? `卡池：${metadata.latestBox.id} ${metadata.latestBox.name} · ${cards.length} 张` + (date ? ` · 更新于 ${date[0]}` : '')
+        : `卡池：${cards.length} 张`;
     }
     state.all = cards;
     for (const c of state.all) {

@@ -22,10 +22,24 @@ concurrency:
 
 jobs:
   sync:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate before publishing
+        run: |
+          node --test tests/*.test.mjs
+          for test in tests/regression/*.mjs; do node "$test"; done
+          node scripts/preflight.mjs
+          node scripts/deckcode.mjs selftest
 
       - name: Stage site files
         run: |

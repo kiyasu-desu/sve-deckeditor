@@ -39,6 +39,7 @@ button.big-ghost:disabled { opacity: .35; cursor: not-allowed; }
 button.big-ghost:disabled:hover { color: var(--dim); border-color: var(--line); }
 .home-tip { margin-top: 24px; color: var(--dim); font-size: 13px; }
 .home-tip b { color: var(--accent2); }
+.pool-status { margin-top: 10px; color: var(--dim); font-size: 12px; line-height: 1.6; }
 #btnBackHome { padding: 4px 10px; font-size: 15px; line-height: 1; }
 
 /* header */

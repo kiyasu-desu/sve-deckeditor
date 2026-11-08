@@ -46,6 +46,7 @@ desktop.ini
 .idea/
 *.swp
 *~
+*.tmp
 
 # ---------- 依赖（本项目无 npm 依赖，留作保险） ----------
 node_modules/
