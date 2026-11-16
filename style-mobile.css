@@ -91,7 +91,7 @@ body.is-touch #poolHint { display: none; }
 @media (max-width: 520px) {
   .pool-grid { grid-template-columns: repeat(2, 1fr); }
   .master-list { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
-  .grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  .grid { --card-min-width: 96px; }
   .qty-overlay { height: 168px; }
   .qty-overlay .qty-b { width: 36px; height: 36px; font-size: 20px; }
 

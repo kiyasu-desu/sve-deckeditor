@@ -27,7 +27,7 @@ class El {
     this.parentNode = null;
     this.dataset = {};
     this.classList = new ClassList(this);
-    this.style = {};
+    this.style = { setProperty(k, v) { this[k] = String(v); } };
     this.attrs = {};
     this._text = '';
     this._html = '';
@@ -49,6 +49,12 @@ class El {
   get innerHTML() { return this._html; }
   set innerHTML(v) { this._html = String(v); this.children = []; }
   appendChild(c) { if (!c) return c; c.parentNode = this; this.children.push(c); return c; }
+  insertBefore(c, next) {
+    if (!next) return this.appendChild(c);
+    c.parentNode = this;
+    this.children.splice(this.children.indexOf(next), 0, c);
+    return c;
+  }
   append(...cs) { cs.forEach((c) => this.appendChild(c)); }
   prepend(c) { c.parentNode = this; this.children.unshift(c); return c; }
   remove() {
@@ -127,6 +133,7 @@ for (const id of IDS) {
   if (id === 'deckName' || id === 'fText' || id === 'fTroopSearch') { el.tagName = 'INPUT'; }
   byId.set(id, el);
 }
+byId.get('viewEditor').classList.add('hidden');
 
 const documentStub = {
   body: new El('body'),
@@ -200,7 +207,10 @@ const sandbox = {
   performance: { now: () => Date.now() },
   requestAnimationFrame: (fn) => setTimeout(fn, 0),
   cancelAnimationFrame: clearTimeout,
-  getComputedStyle: () => ({ getPropertyValue: () => '' }),
+  getComputedStyle: () => ({
+    paddingLeft: '10px', paddingRight: '10px', paddingTop: '10px',
+    getPropertyValue: (key) => ({ '--card-gap': '8px', '--card-height': '220px', '--card-min-width': '126px' })[key],
+  }),
   alert: () => {},
   confirm: () => true,
   prompt: () => null,
@@ -240,8 +250,8 @@ sandbox.fetch = async (url, opts) => {
 // ---------------- 预置一个「已选主战者」的卡组 ----------------
 // 否则 addCard 会因为没主战者而拒绝，测不到增量更新
 storage.set('sve-editor-decks', JSON.stringify([{
-  id: 'harness-deck', name: '测试卡组', poolId: 'theme:pcr',
-  masterSid: 881, basic: {}, evo: {}, saved: false,
+  id: 'harness-deck', name: '测试卡组', poolId: 'cls:巫师',
+  masterSid: 881, basic: { 51: 1 }, evo: {}, saved: false,
 }]));
 storage.set('sve-editor-current', 'harness-deck');
 
@@ -281,9 +291,16 @@ if (threw) console.log('      ' + (threw.stack || '').split('\n').slice(0, 3).jo
 say(errors.length === 0, `无 console.error${errors.length ? `（${errors.length} 条）` : ''}`);
 for (const e of errors.slice(0, 3)) console.log('      ' + e.slice(0, 160));
 
-// boot 后的状态：网格里是否真的渲染出了卡片
 const grid = byId.get('grid');
-say(grid.children.length > 0, `卡池网格渲染出 ${grid.children.length} 个卡片元素`);
+const gridCards = () => grid.querySelectorAll('.card');
+const waitForFrame = () => new Promise((resolve) => sandbox.requestAnimationFrame(resolve));
+say(gridCards().length === 0, '首页未挂载卡池卡片');
+byId.get('btnResume').onclick();
+await waitForFrame();
+const initialCards = gridCards();
+say(initialCards.length > 0 && initialCards.length <= 64,
+  `千张卡池在首屏只挂载 ${initialCards.length} 张卡片`);
+say(ioCount === 0, '主卡池使用虚拟窗口加载图片');
 
 const fCost = byId.get('fCost');
 const costN = (fCost.innerHTML.match(/class="chip"/g) || []).length;
@@ -302,32 +319,58 @@ say(!byId.has('poolHint') && !byId.has('diag') && !byId.has('diag2') && !byId.ha
 // 走真实用户路径（点卡片）触发 addCard，再确认卡片元素还是同一个对象。
 console.log('\n── 增量更新（卡图闪烁问题）──');
 {
-  const target = grid.children.find((el) => el.dataset && el.dataset.sid);
+  const target = initialCards.find((el) => el.dataset.sid && !el.querySelector('.cnt'));
   if (!target) {
     say(false, '网格里没有带 sid 的卡片');
   } else {
     const sid = target.dataset.sid;
     const before = target;
-    const beforeCount = grid.children.length;
+    const beforeCount = gridCards().length;
 
     target.dispatch('click', { shiftKey: false });
 
-    const after = grid.children.find((el) => el.dataset && el.dataset.sid === sid);
+    const after = gridCards().find((el) => el.dataset.sid === sid);
     say(!!after, '点击后卡片仍在网格里');
     say(after === before, '卡片元素是同一个对象（未整体重绘 → 卡图不会闪）');
-    say(grid.children.length === beforeCount, `网格元素数不变（${beforeCount} -> ${grid.children.length}）`);
+    say(gridCards().length === beforeCount, `网格元素数不变（${beforeCount} -> ${gridCards().length}）`);
 
     const cnt = after && after.children.find((x) => x.classList && x.classList.contains('cnt'));
     say(!!cnt && String(cnt.textContent) === '1', `角标更新为 ${cnt ? cnt.textContent : '(无)'}（应为 1）`);
 
-    // 右键（contextmenu）移除一张，角标应消失
-    after.dispatch('contextmenu', {});
-    const after2 = grid.children.find((el) => el.dataset && el.dataset.sid === sid);
-    say(after2 === before, '移除后仍是同一个元素');
-    const cnt2 = after2 && after2.children.find((x) => x.classList && x.classList.contains('cnt'));
+    grid.scrollTop = 228;
+    grid.dispatch('scroll');
+    await waitForFrame();
+    say(gridCards().includes(target), '小幅滚动保留重叠区域内的节点');
+
+    grid.scrollTop = 22800;
+    grid.dispatch('scroll');
+    await waitForFrame();
+    say(!gridCards().includes(target) && gridCards().length <= 88, '跳到深处时卸载离屏行并保持节点数上限');
+
+    grid.scrollTop = 0;
+    grid.dispatch('scroll');
+    await waitForFrame();
+    const remounted = gridCards().find((el) => el.dataset.sid === sid);
+    say(remounted && remounted !== before && remounted.querySelector('.cnt')?.textContent === '1',
+      '滚回后重新挂载卡片并从卡组状态恢复角标');
+
+    remounted?.dispatch('contextmenu', {});
+    const after2 = gridCards().find((el) => el.dataset.sid === sid);
+    say(after2 && after2 === remounted, '移除后仍是同一个元素');
+    const cnt2 = after2?.querySelector('.cnt');
     say(!cnt2, '角标已移除（回到 0 张）');
   }
 }
+
+const fText = byId.get('fText');
+grid.scrollTop = 22800;
+fText.oninput({ target: { value: 'BP01-051SC' } });
+await waitForFrame();
+say(grid.scrollTop === 0 && gridCards().length === 1 && String(gridCards()[0].dataset.sid) === '51',
+  '搜索将虚拟窗口重置到匹配结果首行');
+fText.oninput({ target: { value: 'no-match-for-grid-test' } });
+await waitForFrame();
+say(gridCards().length === 0 && grid.children[0].style.height === '0px', '无匹配结果时清空滚动高度');
 
 console.log(`\n${fail === 0 ? '运行时验证通过' : `有 ${fail} 项失败`}`);
 process.exitCode = fail ? 1 : 0;

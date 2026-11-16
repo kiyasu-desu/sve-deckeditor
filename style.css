@@ -388,20 +388,24 @@ aside, section { min-height: 0; }
 .tab { border-radius: 6px; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .grid {
+  --card-gap: 8px;
+  --card-height: 220px;
+  --card-min-width: 126px;
   flex: 1; overflow-y: auto; padding: 10px;
-  display: grid; gap: 8px;
-  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
-  /* 关键：grid item 的「自动最小尺寸」在 overflow != visible 时会变成 0，
-     导致 .card(overflow:hidden) 在行高紧张时被压扁；用 max-content 锁死行高。 */
-  grid-auto-rows: max-content;
-  align-content: start;
-  align-items: start;
+  scrollbar-gutter: stable;
+  overflow-anchor: none;
   min-height: 0;
+}
+.grid-content { position: relative; }
+.grid-row {
+  position: absolute; inset-inline: 0; height: var(--card-height);
+  display: grid; gap: var(--card-gap);
+  grid-template-columns: repeat(var(--card-columns), minmax(0, 1fr));
 }
 .card {
   position: relative; border: 1px solid var(--line); border-radius: 8px;
   background: var(--bg2); overflow: hidden; cursor: pointer; transition: transform .06s;
-  min-height: 208px;   /* 兜底：即使行高计算异常也不会被压扁 */
+  min-width: 0; height: var(--card-height);
 }
 .card:hover { border-color: var(--accent); transform: translateY(-2px); }
 /* 卡图：固定像素高度 + contain，双保险。
@@ -411,7 +415,7 @@ aside, section { min-height: 0; }
   display: block; background: #0e1015; border-radius: 7px 7px 0 0;
 }
 .card .noimg {
-  width: 100%; aspect-ratio: 63/88; display: flex; flex-direction: column;
+  width: 100%; height: 168px; display: flex; flex-direction: column;
   align-items: center; justify-content: center; gap: 6px;
   color: #6b7480; font-size: 11px; text-align: center; padding: 8px;
   background: #0e1015; word-break: break-word; line-height: 1.35;
