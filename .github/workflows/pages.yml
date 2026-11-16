@@ -52,6 +52,22 @@ jobs:
           du -sh _site
           find _site -type f | sort
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Restore generated card thumbnails
+        uses: actions/cache@v4
+        with:
+          path: .imgcache/card-thumbs-v1
+          key: card-thumbs-pillow-12.3.0-${{ hashFiles('scripts/build-card-thumbnails.py') }}-${{ hashFiles('data/cards.json') }}
+          restore-keys: card-thumbs-pillow-12.3.0-${{ hashFiles('scripts/build-card-thumbnails.py') }}-
+
+      - name: Build WebP card thumbnails
+        run: |
+          python -m pip install Pillow==12.3.0
+          python scripts/build-card-thumbnails.py --site-dir _site
+
       - name: Push to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:

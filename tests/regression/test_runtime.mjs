@@ -48,6 +48,14 @@ class El {
   set textContent(v) { this._text = String(v); this.children = []; }
   get innerHTML() { return this._html; }
   set innerHTML(v) { this._html = String(v); this.children = []; }
+  get isConnected() { return !!(this.parentNode || this.id); }
+  get src() { return this.attrs.src; }
+  set src(value) {
+    this.attrs.src = value;
+    setTimeout(() => {
+      if (this.attrs.src === value) this.dispatch(value === brokenThumbnail ? 'error' : 'load');
+    }, 0);
+  }
   appendChild(c) { if (!c) return c; c.parentNode = this; this.children.push(c); return c; }
   insertBefore(c, next) {
     if (!next) return this.appendChild(c);
@@ -187,6 +195,8 @@ const sandbox = {
   location: { protocol: 'http:', hostname: '127.0.0.1', href: 'http://127.0.0.1:8199/', search: '', hash: '' },
   matchMedia: () => ({ matches: false, addEventListener() {}, addListener() {} }),
   IntersectionObserver: IntersectionObserverStub,
+  AbortController,
+  AbortSignal,
   URL: URLStub,
   Blob: class Blob { constructor(parts, opts) { this.parts = parts; this.type = (opts || {}).type || ''; this.size = (parts || []).reduce((s, p) => s + (p.length || p.byteLength || 0), 0); } },
   Response: class Response { constructor(b, o) { this.body = b; this.headers = (o || {}).headers || {}; } },
@@ -227,8 +237,16 @@ sandbox.self = sandbox;
 
 // 让 data/*.json 走本地文件而不是网络
 const origFetch = globalThis.fetch;
+const cardData = JSON.parse(fs.readFileSync('data/cards.json', 'utf8'));
+const [workingKey, brokenKey] = [51, 52].map(sid => {
+  const card = cardData.find(c => c.sid === sid);
+  return card.md5 + (card.imgExt || '.jpg');
+});
+const thumbPath = 'data/card-thumbs/v1/';
+const brokenThumbnail = thumbPath + brokenKey + '.webp';
 sandbox.fetch = async (url, opts) => {
   const u = String(url);
+  if (u === thumbPath + 'manifest.json') return { ok: true, json: async () => [workingKey, brokenKey] };
   const m = /(?:^|\/)data\/([^?]+)/.exec(u);
   if (m) {
     const p = `data/${m[1]}`;
@@ -301,6 +319,12 @@ const initialCards = gridCards();
 say(initialCards.length > 0 && initialCards.length <= 64,
   `千张卡池在首屏只挂载 ${initialCards.length} 张卡片`);
 say(ioCount === 0, '主卡池使用虚拟窗口加载图片');
+const cardImage = sid => initialCards.find(el => Number(el.dataset.sid) === sid)?.children.find(el => el.tagName === 'IMG');
+for (let i = 0; i < 50 && !cardImage(52)?.src?.startsWith('blob:'); i += 1) {
+  await new Promise(resolve => setTimeout(resolve, 10));
+}
+say(cardImage(51)?.src === thumbPath + workingKey + '.webp', '已生成的卡牌使用 WebP 缩略图');
+say(cardImage(52)?.src?.startsWith('blob:'), '缩略图加载失败后回退到原图');
 
 const fCost = byId.get('fCost');
 const costN = (fCost.innerHTML.match(/class="chip"/g) || []).length;

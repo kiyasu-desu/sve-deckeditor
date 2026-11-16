@@ -64,9 +64,18 @@ try {
   say(!!metadata.latestBox?.id && boxes[metadata.latestBox.id] > 0, '最新卡盒存在于卡表');
 } catch (error) { say(false, `卡池元数据不可用：${error.message}`); }
 
-// 不再依赖 thumbs.json
 say(!app.includes('thumbs.json'), '已不依赖 thumbs.json');
 say(!fs.existsSync('data/thumbs.json'), 'thumbs.json 未随仓库发布');
+const thumbDir = 'data/card-thumbs/v1';
+if (fs.existsSync(`${thumbDir}/manifest.json`)) {
+  try {
+    const keys = JSON.parse(fs.readFileSync(`${thumbDir}/manifest.json`, 'utf8'));
+    const expected = new Set(withImg.map(c => c.md5 + (c.imgExt || '.jpg')));
+    say(Array.isArray(keys) && keys.length === new Set(keys).size
+      && keys.every(key => expected.has(key) && fs.existsSync(`${thumbDir}/${key}.webp`)),
+    '缩略图索引只引用已生成的有效卡图');
+  } catch (error) { say(false, `缩略图索引不可用：${error.message}`); }
+}
 
 // ---------- 4. 图标 ----------
 section('图标');
@@ -125,15 +134,15 @@ say(app.includes('restoreQtyCard'), '含重绘后恢复浮层');
 section('体积');
 const walk = (d, acc = []) => {
   for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-    if (e.name === '.git' || e.name === '.imgcache') continue;
     const p = `${d}/${e.name}`;
+    if (e.name === '.git' || e.name === '.imgcache' || p === './data/card-thumbs') continue;
     if (e.isDirectory()) walk(p, acc); else acc.push(p);
   }
   return acc;
 };
 const files = walk('.');
 const bytes = files.reduce((s, f) => s + fs.statSync(f).size, 0);
-say(bytes < 20 * 1024 * 1024, `仓库 ${(bytes / 1024 / 1024).toFixed(2)} MB（增长上限 20MB，不含本地图像缓存）`);
+say(bytes < 20 * 1024 * 1024, `仓库 ${(bytes / 1024 / 1024).toFixed(2)} MB（增长上限 20MB，不含生成的卡图）`);
 const big = files.filter((f) => fs.statSync(f).size > 100 * 1024 * 1024);
 say(big.length === 0, '无超过 GitHub 100MB 单文件限制的文件');
 say(fs.existsSync('.nojekyll'), '.nojekyll 已就位（Pages 跳过 Jekyll）');
