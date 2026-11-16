@@ -17,6 +17,7 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
 };
 
 const server = http.createServer((req, res) => {
@@ -62,6 +63,16 @@ console.log('\n关键数据：');
 for (const p of ['data/cards.json', 'data/pool-version.json', 'lib/crypto-js.js', 'icons/classButton01.on.png', 'style-mobile.css']) {
   const res = await fetch(BASE + p);
   check(res.ok, `${p}  -> ${res.status}  ${((await res.arrayBuffer()).byteLength / 1024).toFixed(0)}KB`);
+}
+const thumbPath = 'data/card-thumbs/v1/';
+if (fs.existsSync(thumbPath + 'manifest.json')) {
+  const manifest = await fetch(BASE + thumbPath + 'manifest.json');
+  check(manifest.ok, '缩略图索引可以从站点子路径读取');
+  const [key] = await manifest.json();
+  if (key) {
+    const thumb = await fetch(BASE + thumbPath + key + '.webp');
+    check(thumb.ok && thumb.headers.get('content-type') === 'image/webp', 'WebP 缩略图可以从站点子路径读取');
+  }
 }
 
 // 4. 页面里不应存在根绝对路径

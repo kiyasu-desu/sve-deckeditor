@@ -28,6 +28,8 @@ apk/
 **/.imgcache/
 # 内联缩略图（已由 CDN 直连方案取代）
 **/thumbs.json
+# 构建产出的独立 WebP 縮略图及索引
+/data/card-thumbs/
 # 内存 dump
 *.bin
 # 游戏原始资源包

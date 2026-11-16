@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v65';
+  const VERSION = 'v66';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -64,12 +64,30 @@
   // v2：加入右下角噪点修复，缓存键跟着变，避免沿用旧的无修复图
   const IMG_CACHE_NAME = 'sve-img-v4';
   const IMG_CONCURRENCY = 6;
+  const IMG_MEMORY_LIMIT = 24 * 1024 * 1024;
+  const CARD_THUMB_PATH = 'data/card-thumbs/v1/';
 
   let imgCacheStore = null;       // Cache API 句柄（不可用时为 null）
   let imgCdnFails = 0;            // CDN 连续失败次数，超过阈值改走同源代理
-  const imgUrlMap = new Map();    // "md5.ext" -> Promise<string>
+  const imgJobs = new Map();
+  const imgBlobs = new Map();
+  let imgBlobBytes = 0;
   let imgRunning = 0;
   const imgQueue = [];
+  let cardThumbnails;
+
+  async function loadCardThumbnails() {
+    try {
+      const options = { cache: 'no-cache' };
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) options.signal = AbortSignal.timeout(2500);
+      const response = await fetch(CARD_THUMB_PATH + 'manifest.json', options);
+      if (response.ok) {
+        const keys = await response.json();
+        if (Array.isArray(keys)) return new Set(keys);
+      }
+    } catch (e) { /* 没有缩略图时按需取原图 */ }
+    return new Set();
+  }
 
   async function openImgCache() {
     if (imgCacheStore) return imgCacheStore;
@@ -113,11 +131,12 @@
   // 修补时按饱和度门控：只换彩色噪点，灰白色的版权文字原样保留（否则文字会被盖掉）。
   const CORNER_FIX = { enabled: true, wRatio: 0.086, hRatio: 0.035 };
   // 诊断计数：控制台输入 __sveCornerFix 可查看修复成功/失败次数
-  const cornerStat = { fixed: 0, failed: 0 };
+  const cornerStat = { fixed: 0, clean: 0, failed: 0 };
   try { window.__sveCornerFix = cornerStat; } catch (e) { /* ignore */ }
 
   /** 把 blob 载入成可 drawImage 的 <img>；失败返回 null */
-  function blobToImg(blob) {
+  function blobToImg(blob, signal) {
+    if (signal?.aborted) return Promise.resolve(null);
     return new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
       const img = new Image();
@@ -125,37 +144,40 @@
       const finish = (v) => {
         if (done) return;
         done = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', cancel);
+        img.onload = img.onerror = null;
         URL.revokeObjectURL(url);
         resolve(v);
       };
+      const cancel = () => { finish(null); img.removeAttribute('src'); };
+      const timer = setTimeout(cancel, 8000);
+      signal?.addEventListener('abort', cancel, { once: true });
       img.onload = () => finish(img.naturalWidth ? img : null);
       img.onerror = () => finish(null);
       img.decoding = 'async';
       img.src = url;
-      // 兜底超时，避免个别图卡住整个队列
-      setTimeout(() => finish(null), 8000);
     });
   }
 
-  /** 返回 { blob, fixed }：fixed=false 表示没修（调用方据此决定要不要缓存） */
-  async function repairCardCorner(blob) {
-    if (!CORNER_FIX.enabled) return { blob, fixed: false };
+  async function repairCardCorner(blob, signal) {
+    if (!CORNER_FIX.enabled) return { blob, status: 'clean' };
     if (typeof document === 'undefined' || typeof CanvasRenderingContext2D === 'undefined') {
-      return { blob, fixed: false };
+      return { blob, status: 'failed' };
     }
-    const img = await blobToImg(blob);
-    if (!img) return { blob, fixed: false };
+    const img = await blobToImg(blob, signal);
+    if (!img) return { blob, status: 'failed' };
     const w = img.naturalWidth;
     const h = img.naturalHeight;
-    if (!w || !h || w < 200 || h < 200) return { blob, fixed: false };
+    if (w < 200 || h < 200) return { blob, status: 'clean' };
     const cw = Math.max(32, Math.round(w * CORNER_FIX.wRatio));
     const ch = Math.max(18, Math.round(h * CORNER_FIX.hRatio));
-    if (cw * 2 >= w || ch * 2 >= h) return { blob, fixed: false };
+    if (cw * 2 >= w || ch * 2 >= h) return { blob, status: 'clean' };
     try {
       const cv = document.createElement('canvas');
       cv.width = w;
       cv.height = h;
-      const ctx = cv.getContext('2d');
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(img, 0, 0);
 
       // 取右上角一块，垂直翻转后贴到右下角
@@ -183,7 +205,7 @@
           replaced += 1;
         }
       }
-      if (!replaced) return { blob, fixed: false };  // 这张图没有噪点，不用改
+      if (!replaced) return { blob, status: 'clean' };
       ctx.putImageData(dst, w - cw, h - ch);
 
       // 卡图不透明，统一转 JPEG（体积比原 PNG 小很多）
@@ -191,10 +213,10 @@
         try { cv.toBlob((b) => resolve(b), 'image/jpeg', 0.92); }
         catch (e) { resolve(null); }
       });
-      if (!out || !out.size) return { blob, fixed: false };
-      return { blob: out, fixed: true };
+      if (!out || !out.size) return { blob, status: 'failed' };
+      return { blob: out, status: 'fixed' };
     } catch (e) {
-      return { blob, fixed: false };   // 不能因为修复失败而不显示卡图
+      return { blob, status: 'failed' };
     }
   }
 
@@ -203,7 +225,7 @@
     return new Promise((resolve) => {
       const run = async () => {
         imgRunning += 1;
-        try { resolve(await fn()); } finally {
+        try { resolve(await fn()); } catch (e) { resolve(null); } finally {
           imgRunning -= 1;
           const next = imgQueue.shift();
           if (next) next();
@@ -214,81 +236,158 @@
     });
   }
 
-  /** 取某张卡的可显示 URL；失败返回 ''（调用方负责显示占位） */
-  function cardImageUrl(md5, ext) {
-    if (!md5) return Promise.resolve('');
-    const key = md5 + (ext || '.jpg');
-    const hit = imgUrlMap.get(key);
-    if (hit) return hit;
+  async function readCardImage(key, signal) {
+    if (signal.aborted) return null;
+    const cache = await openImgCache();
+    const reqUrl = CDN_BASE + key;
 
-    const task = withSlot(async () => {
-      const cache = await openImgCache();
-      const reqUrl = `${CDN_BASE}${md5}${ext || '.jpg'}`;
-      const cacheKey = new Request(reqUrl);
-
-      // 1) Cache API
-      if (cache) {
-        try {
-          const c = await cache.match(cacheKey);
-          if (c) return URL.createObjectURL(await c.blob());
-        } catch (e) { /* 继续走网络 */ }
-      }
-
-      // 2) 网络：默认直连网易 CDN。
-      //    本机开发时若 serve.mjs 在跑，优先走同源 /img/ 代理（用本地磁盘缓存，比走公网快）；
-      //    CDN 连续失败 3 次也自动切到代理（自建服务器部署时可用）。
-      const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-      const useProxy = location.protocol !== 'file:' && (isLocal || imgCdnFails >= 3);
-      const src = useProxy ? `/img/${md5}${ext || '.jpg'}` : `${CDN_BASE}${md5}${ext || '.jpg'}`;
+    // 1) Cache API
+    if (cache) {
       try {
-        const r = await fetch(src);
-        if (!r.ok) throw new Error('http ' + r.status);
-        const buf = new Uint8Array(await r.arrayBuffer());
-        let bytes = buf;
-        let mime = 'image/jpeg';
-        // 同源代理返回的已是解码好的图片；CDN 原始内容是 base64 文本
-        if (buf[0] === 0xFF || buf[0] === 0x89) {
-          mime = buf[0] === 0x89 ? 'image/png' : 'image/jpeg';
-        } else {
-          const dec = decodeGsfText(new TextDecoder('ascii').decode(buf));
-          if (!dec) throw new Error('decode failed');
-          bytes = dec.bytes;
-          mime = dec.mime;
-        }
-        if (!useProxy) imgCdnFails = 0;
-        let blob = new Blob([bytes], { type: mime });
-        // 修掉右下角的解码噪点（资源本身被截断导致）
-        const rep = await repairCardCorner(blob);
-        blob = rep.blob;
-        if (rep.fixed) {
-          cornerStat.fixed += 1;
-          // 修好的才缓存，避免把没修的图永久存下来
-          if (cache) {
-            cache.put(cacheKey, new Response(blob, { headers: { 'content-type': blob.type || mime } })).catch(() => {});
-          }
-        } else {
-          cornerStat.failed += 1;
-          console.warn('[SVE img] 右下角修复未生效（下次仍会重试）:', md5);
-        }
-        return URL.createObjectURL(blob);
-      } catch (e) {
-        if (!useProxy) imgCdnFails += 1;
-        return '';
-      }
-    });
+        const cached = await cache.match(reqUrl);
+        if (cached) return await cached.blob();
+      } catch (e) { /* 继续走网络 */ }
+    }
+    if (signal.aborted) return null;
 
-    // 失败时从表里移除，允许后续重试
-    const guarded = task.then((u) => { if (!u) imgUrlMap.delete(key); return u; });
-    imgUrlMap.set(key, guarded);
-    return guarded;
+    // 2) 本地优先从 serve.mjs 取图。GitHub Pages 直接使用 CDN。
+    const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    const hasFallback = !location.hostname.endsWith('.github.io') && imgCdnFails >= 3;
+    const useProxy = location.protocol !== 'file:' && (isLocal || hasFallback);
+    const src = useProxy ? `/img/${key}` : reqUrl;
+    try {
+      const r = await fetch(src, { signal });
+      if (!r.ok) throw new Error('http ' + r.status);
+      const buf = new Uint8Array(await r.arrayBuffer());
+      if (signal.aborted) return null;
+      let bytes = buf;
+      let mime = 'image/jpeg';
+      // 同源代理返回的已是解码好的图片；CDN 原始内容是 base64 文本
+      if (buf[0] === 0xFF || buf[0] === 0x89) {
+        mime = buf[0] === 0x89 ? 'image/png' : 'image/jpeg';
+      } else {
+        const dec = decodeGsfText(new TextDecoder('ascii').decode(buf));
+        if (!dec) throw new Error('decode failed');
+        bytes = dec.bytes;
+        mime = dec.mime;
+      }
+      if (!useProxy) imgCdnFails = 0;
+      const { blob, status } = await repairCardCorner(new Blob([bytes], { type: mime }), signal);
+      if (signal.aborted) return null;
+      cornerStat[status] += 1;
+      if (cache && status !== 'failed') {
+        cache.put(reqUrl, new Response(blob, { headers: { 'content-type': blob.type || mime } })).catch(() => {});
+      }
+      return blob;
+    } catch (e) {
+      if (!useProxy && !signal.aborted) imgCdnFails += 1;
+      return null;
+    }
+  }
+
+  function cacheImageBlob(key, blob) {
+    if (blob.size > IMG_MEMORY_LIMIT) return;
+    imgBlobs.set(key, blob);
+    imgBlobBytes += blob.size;
+    while (imgBlobBytes > IMG_MEMORY_LIMIT) {
+      const oldest = imgBlobs.keys().next().value;
+      imgBlobBytes -= imgBlobs.get(oldest).size;
+      imgBlobs.delete(oldest);
+    }
+  }
+
+  function cardImageBlob(md5, ext, signal) {
+    if (!md5 || signal?.aborted) return Promise.resolve(null);
+    const key = md5 + (ext || '.jpg');
+    const cached = imgBlobs.get(key);
+    if (cached) {
+      imgBlobs.delete(key);
+      imgBlobs.set(key, cached);
+      return Promise.resolve(cached);
+    }
+    let job = imgJobs.get(key);
+    if (!job) {
+      const controller = new AbortController();
+      job = { controller, readers: 0, promise: null };
+      imgJobs.set(key, job);
+      job.promise = withSlot(() => readCardImage(key, controller.signal)).then((blob) => {
+        if (imgJobs.get(key) === job) {
+          imgJobs.delete(key);
+          if (blob) cacheImageBlob(key, blob);
+        }
+        return blob;
+      });
+    }
+    job.readers += 1;
+    return new Promise((resolve) => {
+      const finish = (blob) => {
+        signal?.removeEventListener('abort', cancel);
+        job.readers -= 1;
+        resolve(blob);
+      };
+      const cancel = () => {
+        finish(null);
+        if (!job.readers && imgJobs.get(key) === job) {
+          imgJobs.delete(key);
+          job.controller.abort();
+        }
+      };
+      signal?.addEventListener('abort', cancel, { once: true });
+      job.promise.then((blob) => {
+        if (!signal?.aborted) finish(blob);
+      });
+    });
+  }
+
+  const displayedImageUrls = new Map();
+  const originalImageRequests = new WeakMap();
+  let imageRemovalObserver;
+
+  function releaseImageUrl(element) {
+    const url = displayedImageUrls.get(element);
+    if (!url) return;
+    displayedImageUrls.delete(element);
+    URL.revokeObjectURL(url);
+    if (!displayedImageUrls.size) imageRemovalObserver?.disconnect();
+  }
+
+  function assignImageUrl(element, blob, useUrl) {
+    releaseImageUrl(element);
+    if (!imageRemovalObserver && typeof MutationObserver !== 'undefined') {
+      imageRemovalObserver = new MutationObserver(() => {
+        for (const el of displayedImageUrls.keys()) {
+          if (!el.isConnected) releaseImageUrl(el);
+        }
+      });
+    }
+    if (!displayedImageUrls.size) imageRemovalObserver?.observe(document.body, { childList: true, subtree: true });
+    const url = URL.createObjectURL(blob);
+    displayedImageUrls.set(element, url);
+    useUrl(url);
+  }
+
+  function clearOriginalImage(img) {
+    originalImageRequests.delete(img);
+    img.removeAttribute('src');
+    releaseImageUrl(img);
+  }
+
+  async function showOriginalImage(img, md5, ext) {
+    clearOriginalImage(img);
+    const request = {};
+    originalImageRequests.set(img, request);
+    const blob = await cardImageBlob(md5, ext);
+    if (originalImageRequests.get(img) !== request || !img.isConnected) return true;
+    originalImageRequests.delete(img);
+    if (!blob) return false;
+    assignImageUrl(img, blob, (url) => { img.src = url; });
+    return true;
   }
 
   /** 把图片挂到 <img> 上（懒加载：进入视口才开始取图） */
   function attachCardImage(img, md5, ext, onFail) {
     const load = async () => {
-      const url = await cardImageUrl(md5, ext);
-      if (!url) { if (onFail) onFail(); return; }
-      img.src = url;
+      if (!await showOriginalImage(img, md5, ext)) onFail?.();
     };
     if (typeof IntersectionObserver === 'undefined') { load(); return; }
     const io = new IntersectionObserver((entries) => {
@@ -721,12 +820,8 @@
   function showZoom(c) {
     const img = $('zoomImg');
     img.onerror = null;
-    if (!c.md5) {
-      img.removeAttribute('src');
-    } else {
-      img.removeAttribute('src');         // 先清空，避免显示上一张
-      cardImageUrl(c.md5, c.imgExt).then((url) => { if (url) img.src = url; });
-    }
+    if (c.md5) showOriginalImage(img, c.md5, c.imgExt);
+    else clearOriginalImage(img);
     const troops = troopList(c);
     $('zoomInfo').innerHTML = `<b>${c.name || c.id}</b>　${c.id}<br>`
       + `费用 ${c.cost ?? '-'} · ${c.cls || '-'} · ${c.rare || '-'}`
@@ -735,7 +830,10 @@
       + '<div class="zoom-close">点击任意处关闭</div>';
     $('zoom').classList.remove('hidden');
   }
-  function hideZoom() { $('zoom').classList.add('hidden'); }
+  function hideZoom() {
+    $('zoom').classList.add('hidden');
+    clearOriginalImage($('zoomImg'));
+  }
 
   // 悬停效果提示（不含 shortId）
   function showTip(c, e) {
@@ -924,6 +1022,7 @@
   }
 
   const GRID_OVERSCAN = 3;
+  const GRID_PREFETCH_LIMIT = 2;
   const gridRows = new Map();    // 行号 -> 已挂载的行
   const gridCards = new Map();
   let gridContent;
@@ -1020,6 +1119,7 @@
     const visibleStart = Math.max(0, Math.min(lastRow, Math.floor(offset / gridRowStep)));
     const visibleEnd = Math.max(visibleStart, Math.min(lastRow, Math.ceil((offset + grid.clientHeight) / gridRowStep) - 1));
     if (visibleStart === gridVisibleStart && visibleEnd === gridVisibleEnd) return;
+    const movingUp = visibleStart < gridVisibleStart || visibleEnd < gridVisibleEnd;
     gridVisibleStart = visibleStart;
     gridVisibleEnd = visibleEnd;
     const start = Math.max(0, visibleStart - GRID_OVERSCAN);
@@ -1038,10 +1138,14 @@
     }
     restoreQtyCard();
 
-    const distance = (index) => Math.max(visibleStart - index, index - visibleEnd, 0);
-    gridImageQueue = [...gridRows.keys()]
-      .sort((a, b) => distance(a) - distance(b) || a - b)
-      .flatMap((index) => gridRows.get(index).cards.filter((card) => card.loadImage));
+    gridImageQueue = [];
+    const queueRow = (index, prefetch) => {
+      for (const card of gridRows.get(index)?.cards || []) {
+        if (card.loadImage) gridImageQueue.push({ card, prefetch });
+      }
+    };
+    for (let index = visibleStart; index <= visibleEnd; index += 1) queueRow(index, false);
+    queueRow(movingUp ? visibleStart - 1 : visibleEnd + 1, true);
     loadGridImages();
   }
 
@@ -1076,15 +1180,39 @@
   function loadGridImages() {
     // 只提交当前窗口的请求，快速滚动时用新窗口替换等待队列。
     while (gridImagesRunning < IMG_CONCURRENCY && gridImageQueue.length) {
-      const card = gridImageQueue.shift();
+      const { card, prefetch } = gridImageQueue[0];
+      if (prefetch && gridImagesRunning >= GRID_PREFETCH_LIMIT) break;
+      gridImageQueue.shift();
       const load = card.loadImage;
       card.loadImage = null;
       gridImagesRunning += 1;
-      load().finally(() => {
+      load(prefetch ? 'low' : 'high').finally(() => {
         gridImagesRunning -= 1;
         loadGridImages();
       });
     }
+  }
+
+  function waitForGridImage(img, assign, signal) {
+    if (signal.aborted) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      const finish = (ready) => {
+        img.removeEventListener('load', readyImage);
+        img.removeEventListener('error', failedImage);
+        signal.removeEventListener('abort', cancelImage);
+        resolve(ready);
+      };
+      const readyImage = () => finish(true);
+      const failedImage = () => finish(false);
+      const cancelImage = () => {
+        finish(false);
+        img.removeAttribute('src');
+      };
+      img.addEventListener('load', readyImage);
+      img.addEventListener('error', failedImage);
+      signal.addEventListener('abort', cancelImage, { once: true });
+      assign();
+    });
   }
 
   function createGridCard(c) {
@@ -1092,22 +1220,37 @@
     el.className = 'card' + (c.sid ? '' : ' nosid');
     el.draggable = false;
     let loadImage = null;
-    let mounted = true;
+    let controller;
+    let img;
 
     if (c.md5) {
-      const img = document.createElement('img');
+      img = document.createElement('img');
       img.decoding = 'async';
       img.alt = '';
-      const fail = () => {
-        if (mounted) img.replaceWith(makeNoImg(c.name || c.id, '卡图加载失败'));
-      };
-      img.addEventListener('error', fail, { once: true });
-      loadImage = async () => {
+      loadImage = async (priority) => {
+        controller = new AbortController();
+        const { signal } = controller;
+        const key = c.md5 + (c.imgExt || '.jpg');
+        img.fetchPriority = priority;
         try {
-          const url = await cardImageUrl(c.md5, c.imgExt);
-          if (mounted && url) img.src = url;
-          else if (!url) fail();
-        } catch (e) { fail(); }
+          const thumbnails = await cardThumbnails;
+          if (signal.aborted) return;
+          if (thumbnails.has(key)) {
+            const ready = await waitForGridImage(img, () => { img.src = CARD_THUMB_PATH + key + '.webp'; }, signal);
+            if (ready || signal.aborted) return;
+          }
+          const blob = await cardImageBlob(c.md5, c.imgExt, signal);
+          if (blob && !signal.aborted) {
+            const ready = await waitForGridImage(img, () => {
+              assignImageUrl(img, blob, (url) => { img.src = url; });
+            }, signal);
+            if (ready || signal.aborted) return;
+          }
+        } catch (e) { /* 卡图不可用时显示占位 */ }
+        if (!signal.aborted) {
+          releaseImageUrl(img);
+          img.replaceWith(makeNoImg(c.name || c.id, '卡图加载失败'));
+        }
       };
       el.appendChild(img);
     } else {
@@ -1132,7 +1275,8 @@
     return {
       el, loadImage,
       dispose() {
-        mounted = false;
+        controller?.abort();
+        if (img) releaseImageUrl(img);
         cancelPress();
         if (c.sid) gridCards.delete(String(c.sid));
       },
@@ -1373,8 +1517,10 @@
 
       // 剪影：用卡图做低透明度底纹（拿不到图时退化为纯色块）
       if (c && c.md5) {
-        cardImageUrl(c.md5, c.imgExt).then((url) => {
-          if (url && row.isConnected) row.style.setProperty('--sil', `url("${url}")`);
+        cardImageBlob(c.md5, c.imgExt).then((blob) => {
+          if (blob && row.isConnected) {
+            assignImageUrl(row, blob, (url) => row.style.setProperty('--sil', `url("${url}")`));
+          }
         });
       }
 
@@ -1439,10 +1585,9 @@
     if (mc && mc.md5) {
       mImg.alt = mc.name || mc.id;
       mImg.title = `${mc.name || mc.id}（${mc.id}）`;
-      mImg.removeAttribute('src');
-      cardImageUrl(mc.md5, mc.imgExt).then((u) => { if (u) mImg.src = u; });
+      showOriginalImage(mImg, mc.md5, mc.imgExt);
     } else {
-      mImg.removeAttribute('src');
+      clearOriginalImage(mImg);
       mImg.alt = '未选择主战者';
       mImg.title = '未选择主战者';
     }
@@ -1561,21 +1706,13 @@
     ctx.fillStyle = '#11151b';
     ctx.fillRect(0, 0, W, H);
 
-    const loadImg = (url) => new Promise((res) => {
-      if (!url) { res(null); return; }
-      const im = new Image();
-      im.onload = () => res(im);
-      im.onerror = () => res(null);
-      im.src = url;
-    });
-
     const drawBlock = async (items, y0) => {
       for (let i = 0; i < items.length; i += 1) {
         const x = PAD + (i % COLS) * (CW + GAP);
         const y = y0 + Math.floor(i / COLS) * (CH + GAP);
         const c = items[i].c;
-        const url = c && c.md5 ? await cardImageUrl(c.md5, c.imgExt) : '';
-        const im = await loadImg(url);
+        const blob = c?.md5 ? await cardImageBlob(c.md5, c.imgExt) : null;
+        const im = blob ? await blobToImg(blob) : null;
         if (im) ctx.drawImage(im, x, y, CW, CH);
         else { ctx.fillStyle = '#232a34'; ctx.fillRect(x, y, CW, CH); }
       }
@@ -2112,6 +2249,7 @@
   }
 
   async function boot() {
+    cardThumbnails = loadCardThumbnails();
     let cards, metadata;
     try {
       ({ cards, metadata } = await loadCardPool());
@@ -2134,7 +2272,6 @@
       if (c.sid) state.bySid.set(Number(c.sid), c);
       state.byId.set(c.id, c);
     }
-    // 卡图由浏览器直连 CDN 获取（解码后进 Cache API），不再需要内联缩略图
     buildStaticOptions();
     loadStore();
     if (!getPool(state.deck.poolId)) state.deck.poolId = 'theme:pcr';

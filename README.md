@@ -100,6 +100,16 @@ node serve.mjs          # 默认 8099，可用 PORT 环境变量修改
 `serve.mjs` 除托管静态文件外，还提供 `/img/<md5>` 代理：从 CDN 取图、解码并落盘缓存。
 前端会自动检测（本机环境优先走代理，CDN 连续失败时也会回退），因此同一份代码两种部署都能用。
 
+卡池优先使用 256px 宽的 WebP 缩略图。Pages 发布流程会根据卡表生成并缓存缩略图，长按放大和导出图片按需取原图。本地可以先生成部分卡池用于验证：
+
+```bash
+python -m pip install Pillow==12.3.0
+python scripts/build-card-thumbnails.py --class-pool 巫师
+node serve.mjs
+```
+
+移除 `--class-pool` 可生成全部卡池。缩略图和构建缓存留在本地，缺少缩略图的卡会按需回退到原图。
+
 ## 本地运行
 
 需要一个静态服务器（直接双击 `index.html` 会因 `file://` 限制无法加载数据）：
