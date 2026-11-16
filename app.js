@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v64';
+  const VERSION = 'v65';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -329,7 +329,6 @@
     side: 'basic',
     deck: null, decks: [],
     wizard: { poolId: null, masterSid: null, mode: 'new' },
-    imgOk: 0, imgFail: 0, imgTotal: 0,
   };
 
   // ------------------------------------------------------------ 卡组码
@@ -413,7 +412,13 @@
     $('viewHome').classList.toggle('hidden', name !== 'home');
     $('viewEditor').classList.toggle('hidden', name !== 'editor');
     try { localStorage.setItem('sve-view', name); } catch (e) { /* ignore */ }
-    if (name === 'home') updateHome();
+    if (name === 'home') {
+      closeQtyCard();
+      clearGridRows();
+      updateHome();
+    } else {
+      scheduleGridWindow(true);
+    }
   }
   function updateHome() {
     // 计数与「我的卡组」列表保持一致：所有有内容的卡组
@@ -820,6 +825,10 @@
       if (IS_TOUCH) return;            // 移动端长按是放大卡图，不触发移除
       addCard(c, -1);
     });
+    return () => {
+      cancel();
+      clearTimeout(tipTimer);
+    };
   }
 
   // ============================================================ 数量浮层（移动端）
@@ -843,12 +852,13 @@
     openCardData = null;
   }
 
-  // renderGrid 会整体重建网格，重建后把浮层挂回同一张卡上
+  // 列数或筛选结果变化时，浮层可以跟随仍在已挂载区域内的卡片。
   function restoreQtyCard() {
     if (!openCardData) return;
     const sid = openCardData.sid;
     const el = $('grid').querySelector(`.card[data-sid="${sid}"]`);
     if (!el) { closeQtyCard(); return; }
+    if (el === openCardEl) return;
     openCardEl = null;                     // 旧元素已失效
     attachQtyOverlay(el, openCardData);
   }
@@ -910,71 +920,223 @@
       if (e.target.closest('.card') === openCardEl) return;
       closeQtyCard();
     }, true);
-    const grid = $('grid');
-    if (grid) grid.addEventListener('scroll', closeQtyCard, { passive: true });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQtyCard(); });
   }
 
-  // sid -> 网格里的卡片元素，用于增删时局部更新角标（避免整块重绘）
+  const GRID_OVERSCAN = 3;
+  const gridRows = new Map();    // 行号 -> 已挂载的行
   const gridCards = new Map();
+  let gridContent;
+  let gridList = [];
+  let gridColumns = 0;
+  let gridRowStep = 0;
+  let gridPaddingTop = 0;
+  let gridVisibleStart = -1;
+  let gridVisibleEnd = -1;
+  let gridFrame = null;
+  let gridNeedsMeasure = true;
+  let gridImageQueue = [];
+  let gridImagesRunning = 0;
 
   function renderGrid() {
     const list = filteredCards();
-
-    const grid = $('grid');
-    gridCards.clear();
-    const frag = document.createDocumentFragment();
-    for (const c of list) {
-      const el = document.createElement('div');
-      el.className = 'card' + (c.sid ? '' : ' nosid');
-      el.draggable = false;
-      if (c.sid) el.dataset.sid = c.sid;      // 供重绘后恢复数量浮层定位
-
-      if (c.md5) {
-        const img = document.createElement('img');
-        img.loading = 'lazy';
-        img.decoding = 'async';
-        img.alt = '';
-        img.width = 128;          // 预留 128:178 比例，加载前也占位，避免高度塌陷
-        img.height = 178;
-        // 进入视口后才去 CDN 取图（解码结果进 Cache API）；失败时显示占位
-        state.imgTotal += 1;
-        img.addEventListener('load', () => { state.imgOk += 1; updateDiag(); });
-        attachCardImage(img, c.md5, c.imgExt, () => {
-          state.imgFail += 1; updateDiag();
-          img.replaceWith(makeNoImg(c.name || c.id, '卡图加载失败'));
-        });
-        el.appendChild(img);
-      } else {
-        // 卡表里没有这张卡的图片资源（当前版本客户端未包含）
-        el.appendChild(makeNoImg(c.name || c.id, '暂无卡图'));
-      }
-
-      const cost = document.createElement('div');
-      cost.className = 'cost';
-      cost.textContent = c.cost ?? '-';
-      el.appendChild(cost);
-
-      const n = inDeckCount(c.sid);
-      if (n) {
-        const cnt = document.createElement('div');
-        cnt.className = 'cnt';
-        cnt.textContent = n;
-        el.appendChild(cnt);
-      }
-      if (c.sid) gridCards.set(String(c.sid), el);   // 供增删时局部更新角标
-
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      meta.innerHTML = `<div class="nm">${c.name || c.id}</div><div class="sub"><span>${c.cls || ''}</span><span>${c.rare || ''}</span></div>`;
-      el.appendChild(meta);
-
-      bindCardPress(el, c);
-      frag.appendChild(el);
+    if (list.length === gridList.length && list.every((card, i) => card === gridList[i])) {
+      for (const sid of gridCards.keys()) updateCardBadge(sid);
+      refreshQtyCard();
+      return;
     }
-    grid.replaceChildren(frag);
-    restoreQtyCard();       // 重绘后把数量浮层挂回同一张卡
-    updateDiag();
+    gridList = list;
+    clearGridRows();
+    $('grid').scrollTop = 0;
+    scheduleGridWindow(true);
+  }
+
+  function bindGrid() {
+    const grid = $('grid');
+    gridContent = document.createElement('div');
+    gridContent.className = 'grid-content';
+    grid.appendChild(gridContent);
+    grid.addEventListener('scroll', () => {
+      closeQtyCard();
+      hideTip();
+      scheduleGridWindow();
+    }, { passive: true });
+    const resize = () => scheduleGridWindow(true);
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(resize).observe(grid);
+    window.addEventListener('resize', resize);
+  }
+
+  function scheduleGridWindow(measure = false) {
+    gridNeedsMeasure ||= measure;
+    if (gridFrame !== null) return;
+    gridFrame = requestAnimationFrame(() => {
+      gridFrame = null;
+      const grid = $('grid');
+      if ($('viewEditor').classList.contains('hidden') || !grid.clientWidth || !grid.clientHeight) return;
+      if (gridNeedsMeasure) {
+        measureGrid(grid);
+        gridNeedsMeasure = false;
+      }
+      updateGridWindow(grid);
+    });
+  }
+
+  function measureGrid(grid) {
+    const style = getComputedStyle(grid);
+    const gap = parseFloat(style.getPropertyValue('--card-gap'));
+    const height = parseFloat(style.getPropertyValue('--card-height'));
+    const minWidth = parseFloat(style.getPropertyValue('--card-min-width'));
+    const width = grid.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const columns = Math.max(1, Math.floor((width + gap) / (minWidth + gap)));
+    const paddingTop = parseFloat(style.paddingTop);
+    const step = height + gap;
+
+    // 改变列数时，以原来第一条可见行的第一张卡为锚点。
+    const layoutChanged = columns !== gridColumns || step !== gridRowStep;
+    let anchorTop = grid.scrollTop;
+    if (layoutChanged && gridColumns && anchorTop > gridPaddingTop) {
+      const oldOffset = anchorTop - gridPaddingTop;
+      const oldRow = Math.floor(oldOffset / gridRowStep);
+      const newRow = Math.floor(oldRow * gridColumns / columns);
+      anchorTop = newRow * step + Math.min(oldOffset % gridRowStep, step - 1) + paddingTop;
+    }
+    if (layoutChanged) clearGridRows();
+    gridColumns = columns;
+    gridRowStep = step;
+    gridPaddingTop = paddingTop;
+    gridContent.style.setProperty('--card-columns', columns);
+    const rowCount = Math.ceil(gridList.length / columns);
+    gridContent.style.height = `${Math.max(0, rowCount * step - gap)}px`;
+    if (layoutChanged) grid.scrollTop = anchorTop;
+  }
+
+  function updateGridWindow(grid) {
+    if (!gridList.length) {
+      closeQtyCard();
+      return;
+    }
+    const lastRow = Math.ceil(gridList.length / gridColumns) - 1;
+    const offset = grid.scrollTop - gridPaddingTop;
+    const visibleStart = Math.max(0, Math.min(lastRow, Math.floor(offset / gridRowStep)));
+    const visibleEnd = Math.max(visibleStart, Math.min(lastRow, Math.ceil((offset + grid.clientHeight) / gridRowStep) - 1));
+    if (visibleStart === gridVisibleStart && visibleEnd === gridVisibleEnd) return;
+    gridVisibleStart = visibleStart;
+    gridVisibleEnd = visibleEnd;
+    const start = Math.max(0, visibleStart - GRID_OVERSCAN);
+    const end = Math.min(lastRow, visibleEnd + GRID_OVERSCAN);
+    for (const [index, row] of gridRows) {
+      if (index < start || index > end) removeGridRow(index, row);
+    }
+    let next = null;
+    for (let index = end; index >= start; index -= 1) {
+      let row = gridRows.get(index);
+      if (!row) {
+        row = mountGridRow(index);
+        gridContent.insertBefore(row.el, next);
+      }
+      next = row.el;
+    }
+    restoreQtyCard();
+
+    const distance = (index) => Math.max(visibleStart - index, index - visibleEnd, 0);
+    gridImageQueue = [...gridRows.keys()]
+      .sort((a, b) => distance(a) - distance(b) || a - b)
+      .flatMap((index) => gridRows.get(index).cards.filter((card) => card.loadImage));
+    loadGridImages();
+  }
+
+  function mountGridRow(index) {
+    const el = document.createElement('div');
+    el.className = 'grid-row';
+    el.style.top = `${index * gridRowStep}px`;
+    const start = index * gridColumns;
+    const cards = gridList.slice(start, start + gridColumns).map((c) => {
+      const card = createGridCard(c);
+      el.appendChild(card.el);
+      return card;
+    });
+    const row = { el, cards };
+    gridRows.set(index, row);
+    return row;
+  }
+
+  function removeGridRow(index, row) {
+    for (const card of row.cards) card.dispose();
+    row.el.remove();
+    gridRows.delete(index);
+  }
+
+  function clearGridRows() {
+    for (const [index, row] of gridRows) removeGridRow(index, row);
+    gridVisibleStart = gridVisibleEnd = -1;
+    gridImageQueue = [];
+    hideTip();
+  }
+
+  function loadGridImages() {
+    // 只提交当前窗口的请求，快速滚动时用新窗口替换等待队列。
+    while (gridImagesRunning < IMG_CONCURRENCY && gridImageQueue.length) {
+      const card = gridImageQueue.shift();
+      const load = card.loadImage;
+      card.loadImage = null;
+      gridImagesRunning += 1;
+      load().finally(() => {
+        gridImagesRunning -= 1;
+        loadGridImages();
+      });
+    }
+  }
+
+  function createGridCard(c) {
+    const el = document.createElement('div');
+    el.className = 'card' + (c.sid ? '' : ' nosid');
+    el.draggable = false;
+    let loadImage = null;
+    let mounted = true;
+
+    if (c.md5) {
+      const img = document.createElement('img');
+      img.decoding = 'async';
+      img.alt = '';
+      const fail = () => {
+        if (mounted) img.replaceWith(makeNoImg(c.name || c.id, '卡图加载失败'));
+      };
+      img.addEventListener('error', fail, { once: true });
+      loadImage = async () => {
+        try {
+          const url = await cardImageUrl(c.md5, c.imgExt);
+          if (mounted && url) img.src = url;
+          else if (!url) fail();
+        } catch (e) { fail(); }
+      };
+      el.appendChild(img);
+    } else {
+      el.appendChild(makeNoImg(c.name || c.id, '暂无卡图'));
+    }
+
+    const cost = document.createElement('div');
+    cost.className = 'cost';
+    cost.textContent = c.cost ?? '-';
+    el.appendChild(cost);
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="nm">${c.name || c.id}</div><div class="sub"><span>${c.cls || ''}</span><span>${c.rare || ''}</span></div>`;
+    el.appendChild(meta);
+    if (c.sid) {
+      el.dataset.sid = c.sid;
+      gridCards.set(String(c.sid), el);
+      updateCardBadge(c.sid);
+    }
+    const cancelPress = bindCardPress(el, c);
+    return {
+      el, loadImage,
+      dispose() {
+        mounted = false;
+        cancelPress();
+        if (c.sid) gridCards.delete(String(c.sid));
+      },
+    };
   }
 
   // 增删卡牌时只更新那一张卡的角标，避免整块重绘 —— 重绘会让所有 <img> 重新走一遍
@@ -1693,6 +1855,7 @@
       document.body.classList.add('is-mobile');
     }
     bindQtyDismiss();
+    bindGrid();
 
     $('fText').oninput = (e) => { state.filter.text = e.target.value; renderGrid(); };
 
