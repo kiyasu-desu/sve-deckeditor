@@ -14,7 +14,7 @@
 
   const KEY = 'kcrsJtKRaoxBQSaPD1qO/IWKza0AfzLauCv7RgEbPyM=';
   const IV = 'g6rMfAsWbbacxpMyR7wGfA==';
-  const VERSION = 'v66';
+  const VERSION = 'v67';
 
   // 联动主题 -> 卡盒
   // 注意：主题归属以 cards.json 里预计算好的 card.theme 为准（构建时由 tools/add-theme.mjs 写入）。
@@ -956,7 +956,7 @@
     const sid = openCardData.sid;
     const el = $('grid').querySelector(`.card[data-sid="${sid}"]`);
     if (!el) { closeQtyCard(); return; }
-    if (el === openCardEl) return;
+    if (el === openCardEl) { refreshQtyCard(); return; }
     openCardEl = null;                     // 旧元素已失效
     attachQtyOverlay(el, openCardData);
   }
@@ -998,8 +998,8 @@
       if (d > 0 && cur >= LIMIT.per) { toast(`每张卡最多 ${LIMIT.per} 张`); return; }
       if (d < 0 && cur <= 0) return;
       state.side = side;                 // 始终加到该卡所属的分区
-      addCard(c, d);                     // 内部会重绘网格
-      restoreQtyCard();                  // 重绘后把浮层挂回去
+      addCard(c, d);                     // 增量更新卡组、角标与浮层数字
+      restoreQtyCard();                  // 网格重挂载时挂回浮层，否则就地刷新数字
     });
     // 浮层自身吞掉点击，避免冒泡到「点别处关闭」
     ov.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -1328,6 +1328,7 @@
     saveStore();
     // 只更新这一张卡的角标：整块重绘会让所有卡图重新加载（闪一下 + 卡顿）
     updateCardBadge(c.sid);
+    refreshQtyCard();
     renderDeck();
   }
 
